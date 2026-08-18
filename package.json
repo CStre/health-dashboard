@@ -3,13 +3,11 @@
   "version": "1.0.0",
   "description": "Passphrase-encrypted personal health dashboard published to GitHub Pages",
   "scripts": {
-    "build": "node scripts/build.js"
+    "build": "node scripts/build.js",
+    "verify": "node scripts/verify.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "devDependencies": {
-    "xlsx": "^0.18.5"
-  },
   "private": true
 }

@@ -4,164 +4,599 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Health Dashboard</title>
+<meta name="description" content="Personal encrypted health dashboard — blood test trends and genetics." />
+<meta name="theme-color" content="#0a0e1a" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 <style>
   :root {
-    color-scheme: light;
-    --page:           #f9f9f7;
-    --surface-1:      #fcfcfb;
-    --text-primary:   #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted:     #898781;
-    --grid:           #e1e0d9;
-    --axis:           #c3c2b7;
-    --border:         rgba(11, 11, 11, 0.10);
-    --series-1:       #2a78d6;
-    --flag:           #d03b3b;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --page:           #0d0d0d;
-      --surface-1:      #1a1a19;
-      --text-primary:   #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted:     #898781;
-      --grid:           #2c2c2a;
-      --axis:           #383835;
-      --border:         rgba(255, 255, 255, 0.10);
-      --series-1:       #3987e5;
-      --flag:           #e66767;
-    }
+    --bg-0: #06080f;
+    --bg-1: #0a0e1a;
+    --bg-2: #0f1424;
+    --bg-3: #161c30;
+    --surface: rgba(255, 255, 255, 0.04);
+    --surface-2: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --text: #e8ecf5;
+    --text-dim: #a3adc2;
+    --text-faint: #6d7691;
+    --accent: #5aa9ff;
+    --accent-2: #4ade80;
+    --accent-soft: rgba(90, 169, 255, 0.12);
+    --warn: #ffb547;
+    --ok: #4ade80;
+    --mono: 'JetBrains Mono', ui-monospace, monospace;
+    --shadow: 0 20px 60px -20px rgba(0, 0, 0, 0.6);
+    --radius: 14px;
+    --radius-lg: 22px;
+    --max-w: 1200px;
   }
 
   * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
   body {
-    margin: 0;
-    background: var(--page);
-    color: var(--text-primary);
-    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg-0);
+    color: var(--text);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
-  main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
-  h1 { font-size: 1.5rem; margin: 0 0 4px; }
-  .subtitle { color: var(--text-secondary); margin: 0 0 24px; }
-  h2 { font-size: 1.1rem; margin: 40px 0 12px; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; }
+  .container { max-width: var(--max-w); margin: 0 auto; padding: 0 24px; }
+  [hidden] { display: none !important; }
+
+  /* Background effects */
+  .grain {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.035;
+    background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+    mix-blend-mode: overlay;
+  }
+  .gradient-mesh {
+    position: fixed; inset: -30%; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(50% 50% at 20% 20%, rgba(90, 169, 255, 0.16) 0%, transparent 60%),
+      radial-gradient(40% 40% at 80% 10%, rgba(74, 222, 128, 0.10) 0%, transparent 60%),
+      radial-gradient(60% 60% at 80% 90%, rgba(90, 169, 255, 0.08) 0%, transparent 60%),
+      radial-gradient(40% 40% at 10% 90%, rgba(255, 181, 71, 0.05) 0%, transparent 60%);
+    filter: blur(40px);
+    animation: meshDrift 22s ease-in-out infinite alternate;
+  }
+  @keyframes meshDrift {
+    0%   { transform: translate3d(0, 0, 0) scale(1); }
+    100% { transform: translate3d(2%, -2%, 0) scale(1.05); }
+  }
+
+  /* Topbar */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(6, 8, 15, 0.7);
+    backdrop-filter: saturate(160%) blur(16px);
+    -webkit-backdrop-filter: saturate(160%) blur(16px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-inner {
+    max-width: var(--max-w); margin: 0 auto; padding: 14px 24px;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 24px; align-items: center;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand-mark {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    display: grid; place-items: center;
+    box-shadow: 0 0 30px rgba(90, 169, 255, 0.35);
+  }
+  .pulse-dot {
+    width: 10px; height: 10px; background: white; border-radius: 50%;
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6); }
+    70%  { box-shadow: 0 0 0 14px rgba(255, 255, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+  }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.1; }
+  .brand-text strong { font-size: 15px; letter-spacing: -0.01em; }
+  .brand-text span { font-size: 12px; color: var(--text-dim); }
+
+  .nav { display: flex; gap: 28px; justify-content: center; font-size: 14px; color: var(--text-dim); }
+  .nav a { position: relative; transition: color 160ms ease; }
+  .nav a::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px;
+    background: var(--accent); transform: scaleX(0); transform-origin: left;
+    transition: transform 220ms ease;
+  }
+  .nav a:hover { color: var(--text); }
+  .nav a:hover::after { transform: scaleX(1); }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px;
+    border: 1px solid var(--border); border-radius: 999px;
+    font-size: 12px; color: var(--text-dim); background: var(--surface);
+    font-family: inherit; cursor: default;
+    transition: border-color 180ms ease, color 180ms ease;
+  }
+  .status-dot { width: 8px; height: 8px; background: var(--text-faint); border-radius: 50%; transition: background 200ms ease; }
+  .status.ok .status-dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  .status.ok { cursor: pointer; }
+  .status.ok:hover { border-color: var(--warn); color: var(--warn); }
+  .status.ok:hover .status-dot { background: var(--warn); box-shadow: 0 0 10px var(--warn); }
+  .status .lock-ic { opacity: 0.75; transition: opacity 180ms ease, transform 180ms ease; }
+  .status.ok:hover .lock-ic { opacity: 1; transform: scale(1.15); }
 
   /* Unlock screen */
-  #unlock {
-    max-width: 400px; margin: 15vh auto 0; padding: 28px;
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  .unlock-wrap {
+    position: relative; z-index: 1;
+    min-height: calc(100vh - 66px);
+    display: grid; place-items: center; padding: 40px 24px;
   }
-  #unlock h1 { font-size: 1.2rem; }
-  #unlock p { color: var(--text-secondary); font-size: 0.9rem; }
-  #unlock form { display: flex; gap: 8px; margin-top: 12px; }
-  #unlock input[type="password"] {
-    flex: 1; padding: 10px 12px; font-size: 1rem;
-    border: 1px solid var(--axis); border-radius: 8px;
-    background: var(--page); color: var(--text-primary);
-  }
-  #unlock button {
-    padding: 10px 18px; font-size: 1rem; border: none; border-radius: 8px;
-    background: var(--series-1); color: #fff; cursor: pointer;
-  }
-  #unlock .error { color: var(--flag); font-size: 0.85rem; min-height: 1.2em; margin: 8px 0 0; }
-
-  /* Filter row */
-  .filters { display: flex; gap: 8px; align-items: center; margin: 0 0 16px; flex-wrap: wrap; }
-  .filters .toggle {
-    display: inline-flex; border: 1px solid var(--axis); border-radius: 8px; overflow: hidden;
-  }
-  .filters .toggle button {
-    padding: 6px 14px; border: none; background: var(--surface-1);
-    color: var(--text-secondary); font-size: 0.85rem; cursor: pointer;
-  }
-  .filters .toggle button[aria-pressed="true"] {
-    background: var(--series-1); color: #fff;
-  }
-  .filters .count { color: var(--text-muted); font-size: 0.85rem; }
-
-  .chart-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 16px;
-  }
-  .card {
-    background: var(--surface-1);
+  .unlock-card {
+    width: 100%; max-width: 460px;
+    padding: 40px 36px;
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 16px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    box-shadow: var(--shadow);
   }
-  .card h3 { margin: 0 0 2px; font-size: 0.95rem; }
-  .card .meta { color: var(--text-muted); font-size: 0.8rem; margin: 0 0 8px; }
-  .card svg { display: block; width: 100%; height: auto; }
+  .unlock-card .eyebrow { margin-bottom: 20px; }
+  .unlock-card h1 {
+    margin: 0 0 12px; font-size: 32px; font-weight: 700; letter-spacing: -0.02em;
+    background: linear-gradient(180deg, #ffffff 0%, #b6c0d8 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .unlock-card p { color: var(--text-dim); font-size: 14px; margin: 0 0 24px; }
+  .unlock-card form { display: flex; flex-direction: column; gap: 12px; }
+  .unlock-card input[type="password"] {
+    padding: 13px 16px; font-size: 15px; font-family: var(--mono);
+    border: 1px solid var(--border-strong); border-radius: 12px;
+    background: var(--bg-1); color: var(--text);
+    outline: none; transition: border-color 200ms ease, box-shadow 200ms ease;
+  }
+  .unlock-card input[type="password"]:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  .unlock-card button {
+    padding: 13px 18px; font-size: 15px; font-weight: 600;
+    border: none; border-radius: 12px; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent) 0%, #3d8de0 100%);
+    color: #fff;
+    box-shadow: 0 8px 24px -8px rgba(90, 169, 255, 0.5);
+    transition: transform 160ms ease, box-shadow 160ms ease;
+  }
+  .unlock-card button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 12px 28px -8px rgba(90, 169, 255, 0.6); }
+  .unlock-card button:disabled { opacity: 0.6; cursor: default; }
+  .unlock-card .error { color: #ff7b7b; font-size: 13px; min-height: 1.3em; margin: 10px 0 0; }
+  .unlock-card .lock-note { font-size: 12px; color: var(--text-faint); margin: 18px 0 0; }
+  .unlock-card.shake { animation: shake 400ms ease; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-10px); }
+    40% { transform: translateX(9px); }
+    60% { transform: translateX(-6px); }
+    80% { transform: translateX(4px); }
+  }
+  .unlock-card input.bad { border-color: #ff7b7b; box-shadow: 0 0 0 3px rgba(255, 123, 123, 0.15); }
+
+  /* Decryption progress */
+  .unlock-progress { margin-top: 26px; }
+  .loader-ring {
+    width: 56px; height: 56px; margin: 0 auto 20px;
+    border-radius: 50%;
+    background: conic-gradient(from 0deg, var(--accent), var(--accent-2), transparent 65%);
+    animation: ringSpin 1s linear infinite;
+    display: grid; place-items: center;
+  }
+  .loader-core {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--bg-1);
+    display: grid; place-items: center;
+  }
+  .loader-core::after {
+    content: '';
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes ringSpin { to { transform: rotate(360deg); } }
+  .progress-track {
+    height: 8px; border-radius: 999px;
+    background: var(--bg-1); border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    box-shadow: 0 0 12px rgba(90, 169, 255, 0.6);
+    transition: width 200ms ease;
+  }
+  .progress-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    margin-top: 10px;
+  }
+  .progress-stage { font-size: 13px; color: var(--text-dim); }
+  .progress-pct { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--text); }
+
+  /* Failed state — the bar freezes where it failed and turns red */
+  .unlock-progress.failed .loader-ring {
+    animation: none;
+    background: conic-gradient(from 0deg, #ff7b7b, rgba(255, 123, 123, 0.25));
+  }
+  .unlock-progress.failed .loader-core::after { background: #ff7b7b; animation: none; }
+  .unlock-progress.failed .progress-fill {
+    background: linear-gradient(90deg, #d03b3b, #ff7b7b);
+    box-shadow: 0 0 12px rgba(255, 123, 123, 0.5);
+  }
+  .unlock-progress.failed .progress-stage,
+  .unlock-progress.failed .progress-pct { color: #ff7b7b; }
+
+  /* Eyebrow */
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px;
+    border: 1px solid var(--border-strong); border-radius: 999px; background: var(--surface);
+    font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim);
+  }
+  .eyebrow-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: pulse 2s ease-in-out infinite; }
+
+  /* Hero */
+  .hero { position: relative; padding: 90px 0 50px; overflow: hidden; }
+  .hero-bg {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(60% 60% at 50% 0%, rgba(90, 169, 255, 0.15) 0%, transparent 60%);
+  }
+  .hero-inner { position: relative; z-index: 1; max-width: 880px; }
+  .hero .eyebrow { margin-bottom: 28px; }
+  .hero-title {
+    margin: 0 0 20px;
+    font-size: clamp(40px, 6.5vw, 76px);
+    line-height: 1.02; letter-spacing: -0.03em; font-weight: 700;
+    background: linear-gradient(180deg, #ffffff 0%, #b6c0d8 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero-title .accent {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .hero-sub { font-size: clamp(15px, 1.6vw, 18px); color: var(--text-dim); max-width: 620px; margin: 0 0 32px; }
+  .hero-meta { display: flex; flex-wrap: wrap; gap: 24px; font-size: 13px; color: var(--text-faint); }
+  .hero-meta strong { color: var(--text); font-weight: 500; font-family: var(--mono); }
+
+  /* Sections */
+  .section { padding: 50px 24px; position: relative; z-index: 1; }
+  .section-head { margin-bottom: 28px; max-width: 720px; }
+  .section-head h2 { margin: 0 0 8px; font-size: clamp(24px, 3vw, 34px); letter-spacing: -0.02em; font-weight: 600; }
+  .section-head p { color: var(--text-dim); margin: 0; font-size: 14px; }
+
+  /* Stat grid */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card {
+    position: relative; padding: 22px 22px 18px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--surface) 0%, transparent 100%);
+    overflow: hidden;
+    transition: transform 240ms ease, border-color 240ms ease;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2)); opacity: 0.6;
+  }
+  .stat-card:hover { transform: translateY(-2px) scale(1.02); border-color: var(--border-strong); }
+
+  /* Hover-expand: text and small components grow slightly on hover.
+     Deliberately NOT applied to the large containers (.chart-shell, .picker). */
+  .hero-title, .hero-sub, .section-head h2, .section-head p, .hero-meta span,
+  .chart-note, .secure-badge, .footer .mono, .brand,
+  .gene-card .gene-name, .gene-card .gene-cond, .gene-card .gene-notes,
+  details.panel summary, .status {
+    transition: transform 180ms ease;
+    transform-origin: left center;
+  }
+  .hero-title:hover, .hero-sub:hover, .section-head h2:hover, .section-head p:hover,
+  .chart-note:hover, .gene-card .gene-name:hover, .gene-card .gene-cond:hover,
+  .gene-card .gene-notes:hover, details.panel summary:hover { transform: scale(1.025); }
+  .hero-meta span:hover, .secure-badge:hover, .footer .mono:hover, .brand:hover, .status:hover { transform: scale(1.06); }
+  .stat-card header { font-size: 13px; color: var(--text-dim); margin-bottom: 14px; }
+  .stat-card .stat-value {
+    font-size: clamp(32px, 4vw, 48px); font-weight: 700; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; line-height: 1; margin-bottom: 10px;
+  }
+  .stat-card footer { font-size: 12px; color: var(--text-faint); }
+
+  /* Series picker */
+  .picker {
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    background: var(--surface); padding: 18px 20px; margin-bottom: 18px;
+  }
+  .picker-head { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .picker-head input[type="search"] {
+    flex: 1; min-width: 200px;
+    padding: 9px 14px; font-size: 13px; font-family: var(--mono);
+    border: 1px solid var(--border-strong); border-radius: 10px;
+    background: var(--bg-1); color: var(--text); outline: none;
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+  }
+  .picker-head input[type="search"]:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .picker-head .count { font-family: var(--mono); font-size: 12px; color: var(--text-faint); white-space: nowrap; }
+  .preset-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .preset-row .preset-label {
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-faint); margin-right: 4px;
+  }
+  .preset {
+    padding: 6px 14px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--border-strong);
+    background: linear-gradient(180deg, var(--surface-2) 0%, var(--surface) 100%);
+    color: var(--text-dim); font-size: 12.5px; font-weight: 500;
+    transition: border-color 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  }
+  .preset:hover {
+    color: var(--text); border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px -8px rgba(90, 169, 255, 0.4);
+  }
+  .preset.on {
+    color: #fff; border-color: var(--accent);
+    background: linear-gradient(135deg, var(--accent) 0%, #3d8de0 100%);
+    box-shadow: 0 6px 18px -8px rgba(90, 169, 255, 0.5);
+  }
+  .chip-cloud {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    max-height: 132px; overflow-y: auto; padding: 2px;
+    scrollbar-width: thin; scrollbar-color: var(--bg-3) transparent;
+  }
+  .chip-cloud::-webkit-scrollbar { width: 6px; }
+  .chip-cloud::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 12px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent;
+    color: var(--text-dim); font-size: 12.5px;
+    transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+  }
+  .chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .chip .chip-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); flex: 0 0 auto; }
+  .chip.on { color: var(--text); border-color: var(--chip-c, var(--accent)); background: color-mix(in srgb, var(--chip-c, var(--accent)) 14%, transparent); }
+  .chip.on .chip-dot { background: var(--chip-c, var(--accent)); box-shadow: 0 0 8px var(--chip-c, var(--accent)); }
+  .chip:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Big chart */
+  .chart-shell {
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    background: var(--surface); padding: 22px 22px 12px;
+    box-shadow: var(--shadow);
+  }
+  .chart-shell .chart-note {
+    font-size: 13.5px; color: var(--text-dim);
+    margin: 0 0 10px; min-height: 1.2em;
+  }
+  .chart-shell svg { display: block; width: 100%; height: auto; }
+  .chart-empty { color: var(--text-faint); font-size: 14px; text-align: center; padding: 80px 0; }
 
   .tooltip {
-    position: fixed; pointer-events: none; display: none; z-index: 10;
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    padding: 6px 10px; font-size: 0.8rem;
+    position: fixed; pointer-events: none; display: none; z-index: 60;
+    background: var(--bg-2); border: 1px solid var(--border-strong); border-radius: 10px;
+    box-shadow: var(--shadow); padding: 8px 12px; font-size: 12px;
   }
-  .tooltip .tt-value { font-weight: 600; }
-  .tooltip .tt-date { color: var(--text-secondary); }
+  .tooltip .tt-test { font-weight: 600; color: var(--text); }
+  .tooltip .tt-value { font-family: var(--mono); color: var(--text); }
+  .tooltip .tt-date { color: var(--text-dim); font-family: var(--mono); font-size: 11px; }
 
-  table {
-    width: 100%; border-collapse: collapse;
-    background: var(--surface-1); border: 1px solid var(--border);
-    border-radius: 10px; overflow: hidden;
+  /* Genetics */
+  .gene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .gene-card {
+    position: relative; padding: 22px;
+    border: 1px solid var(--border); border-radius: var(--radius-lg);
+    background: var(--surface); overflow: hidden;
+    transition: transform 220ms ease, border-color 220ms ease;
   }
-  th, td { text-align: left; padding: 10px 12px; border-top: 1px solid var(--grid); vertical-align: top; }
-  thead th { border-top: none; font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; }
+  .gene-card:hover { transform: translateY(-2px) scale(1.015); border-color: var(--border-strong); }
+  .gene-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, var(--warn) 0%, var(--accent) 100%);
+  }
+  .gene-card .gene-name {
+    display: flex; align-items: center; gap: 10px;
+    font-family: var(--mono); font-size: 18px; font-weight: 600; margin-bottom: 6px;
+  }
+  .gene-flash {
+    width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
+    background: var(--warn);
+    box-shadow: 0 0 0 0 rgba(255, 181, 71, 0.6);
+    animation: geneFlash 2s ease-in-out infinite;
+  }
+  @keyframes geneFlash {
+    0%   { box-shadow: 0 0 0 0 rgba(255, 181, 71, 0.6); }
+    70%  { box-shadow: 0 0 0 12px rgba(255, 181, 71, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 181, 71, 0); }
+  }
+  .gene-card .gene-tag {
+    display: inline-block; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 4px; margin-bottom: 10px;
+    background: rgba(255, 181, 71, 0.16); color: var(--warn);
+  }
+  .gene-card .gene-cond { font-size: 14px; font-weight: 500; margin-bottom: 6px; }
+  .gene-card .gene-notes { font-size: 13px; color: var(--text-dim); }
+  .gene-card .gene-date { font-size: 11px; color: var(--text-faint); font-family: var(--mono); margin-top: 10px; }
 
-  details.panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; margin-bottom: 8px; }
-  details.panel summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; }
-  details.panel .genes { color: var(--text-secondary); font-size: 0.85rem; margin: 8px 0 4px; }
+  details.panel {
+    border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--surface); padding: 14px 20px; margin-bottom: 10px;
+    transition: border-color 200ms ease;
+  }
+  details.panel { transition: transform 200ms ease, border-color 200ms ease; }
+  details.panel:hover { border-color: var(--border-strong); transform: scale(1.008); }
+  details.panel summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+  details.panel summary .gene-count { color: var(--text-faint); font-family: var(--mono); font-size: 12px; font-weight: 400; margin-left: 8px; }
+  details.panel summary .gene-hits {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 11px; font-weight: 500;
+    color: var(--warn); margin-left: 10px;
+    padding: 2px 8px; border-radius: 999px;
+    background: rgba(255, 181, 71, 0.12); border: 1px solid rgba(255, 181, 71, 0.3);
+  }
+  details.panel summary .gene-hits .gene-flash { width: 7px; height: 7px; }
+  details.panel .genes { color: var(--text-dim); font-size: 13px; font-family: var(--mono); line-height: 1.9; margin: 12px 0 4px; }
+  details.panel .genes .gene-pos {
+    color: var(--warn); font-weight: 600;
+    text-shadow: 0 0 12px rgba(255, 181, 71, 0.6);
+    animation: genePosGlow 2s ease-in-out infinite;
+  }
+  @keyframes genePosGlow {
+    0%, 100% { text-shadow: 0 0 4px rgba(255, 181, 71, 0.2); }
+    50%      { text-shadow: 0 0 14px rgba(255, 181, 71, 0.9); }
+  }
 
-  .timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-  .timeline li { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
-  .timeline .tl-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-  .timeline .tl-date { color: var(--text-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-  .timeline .tl-type { font-weight: 600; }
-  .timeline .tl-details { color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px; }
+  /* Footer */
+  .footer { margin-top: 60px; padding: 36px 0; border-top: 1px solid var(--border); position: relative; z-index: 1; }
+  .footer-inner { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap; font-size: 13px; color: var(--text-dim); }
+  .footer .mono { font-family: var(--mono); font-size: 12px; color: var(--text-faint); }
+  .secure-badge {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 7px 14px; border: 1px solid var(--border-strong); border-radius: 999px;
+    background: var(--surface); font-size: 12px; color: var(--text-dim);
+  }
+  .secure-badge svg { color: var(--ok); flex: 0 0 auto; }
 
-  .note { color: var(--text-muted); font-size: 0.8rem; }
-  [hidden] { display: none !important; }
+  /* Series hover: the hovered line thickens and its points grow */
+  .series path.line { transition: stroke-width 160ms ease; }
+  .series:hover path.line { stroke-width: 3.75; }
+  .series circle.dot { transition: r 160ms ease; }
+  .series:hover circle.dot { r: 6.5px; }
+
+  .tooltip .tt-row { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .tooltip .tt-row:first-of-type { margin-top: 6px; }
+  .tooltip .tt-swatch { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .tooltip .tt-name { color: var(--text-dim); }
+  .tooltip .tt-val { font-family: var(--mono); color: var(--text); margin-left: auto; padding-left: 12px; }
+  .tooltip .tt-row.hot .tt-name { color: var(--text); font-weight: 600; }
+
+  /* Reveal animation */
+  .reveal { opacity: 0; transform: translateY(20px); transition: opacity 700ms ease, transform 700ms cubic-bezier(0.2, 0.7, 0.2, 1); }
+  .reveal.visible { opacity: 1; transform: translateY(0); }
+
+  /* Responsive */
+  @media (max-width: 900px) {
+    .topbar-inner { grid-template-columns: auto 1fr; }
+    .nav { display: none; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .hero { padding: 60px 0 40px; }
+    .section { padding: 36px 16px; }
+    .container { padding: 0 16px; }
+  }
+  @media (max-width: 520px) {
+    .stat-grid { grid-template-columns: 1fr; }
+    .unlock-card { padding: 30px 24px; }
+    .chart-shell { padding: 14px 12px 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+    .reveal { opacity: 1; transform: none; }
+  }
 </style>
 </head>
 <body>
+<div class="grain"></div>
+<div class="gradient-mesh" aria-hidden="true"></div>
 
-<div id="unlock">
-  <h1>Health Dashboard</h1>
-  <p>This data is encrypted. Enter the passphrase to decrypt it in your browser — nothing is sent anywhere.</p>
-  <form id="unlock-form">
-    <input type="password" id="passphrase" autocomplete="current-password" placeholder="Passphrase" autofocus />
-    <button type="submit">Unlock</button>
-  </form>
-  <p class="error" id="unlock-error"></p>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <div class="brand-mark"><span class="pulse-dot"></span></div>
+      <div class="brand-text">
+        <strong id="brand-main">Health Dashboard</strong>
+        <span id="brand-sub">Encrypted</span>
+      </div>
+    </div>
+    <nav class="nav" id="nav" hidden>
+      <a href="#bloodwork">Blood Tests</a>
+      <a href="#genetics">Genetics</a>
+    </nav>
+    <button class="status" id="status-pill" type="button" disabled>
+      <span class="status-dot"></span>
+      <span class="status-text">Locked</span>
+    </button>
+  </div>
+</header>
+
+<div class="unlock-wrap" id="unlock">
+  <div class="unlock-card" id="unlock-card">
+    <span class="eyebrow"><span class="eyebrow-dot"></span>Fully Encrypted</span>
+    <h1>Unlock your data</h1>
+    <p>This dashboard's data is encrypted at rest. Your phrase derives the key in this browser — nothing is ever transmitted.</p>
+    <form id="unlock-form">
+      <input type="password" id="passphrase" autocomplete="current-password" placeholder="Decryption Phrase" autofocus />
+      <button type="submit">Unlock</button>
+    </form>
+    <p class="error" id="unlock-error"></p>
+    <p class="lock-note">Wrong phrases fail authentication — nothing partial ever renders.</p>
+    <div class="unlock-progress" id="unlock-progress" hidden>
+      <div class="loader-ring"><div class="loader-core"></div></div>
+      <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-row">
+        <span class="progress-stage" id="progress-stage">Preparing…</span>
+        <span class="progress-pct" id="progress-pct">0%</span>
+      </div>
+    </div>
+  </div>
 </div>
 
 <main id="app" hidden>
-  <h1>Health Dashboard</h1>
-  <p class="subtitle" id="generated"></p>
-
-  <h2>Blood tests</h2>
-  <div class="filters">
-    <div class="toggle" role="group" aria-label="Which tests to show">
-      <button id="btn-featured" aria-pressed="true">Featured</button>
-      <button id="btn-all" aria-pressed="false">All tests</button>
+  <section class="hero">
+    <div class="hero-bg" aria-hidden="true"></div>
+    <div class="container hero-inner reveal">
+      <span class="eyebrow"><span class="eyebrow-dot"></span>Decrypted · this session only</span>
+      <h1 class="hero-title"><span id="hero-name">Your</span> health,<br /><span class="accent">charted.</span></h1>
+      <p class="hero-sub" id="hero-sub"></p>
+      <div class="hero-meta" id="hero-meta"></div>
     </div>
-    <span class="count" id="chart-count"></span>
-  </div>
-  <div class="chart-grid" id="charts"></div>
+  </section>
 
-  <h2>Genetic testing</h2>
-  <table id="genetics-table">
-    <thead><tr><th>Gene</th><th>Result</th><th>Condition</th><th>Date</th><th>Notes</th></tr></thead>
-    <tbody></tbody>
-  </table>
-  <h2 style="font-size:0.95rem">Panels run (genes covered)</h2>
-  <div id="panels"></div>
+  <section class="section container" id="bloodwork">
+    <div class="section-head reveal">
+      <h2>Blood tests</h2>
+      <p>Longitudinal trends by analyte. Dashed segments span visits where a test was not performed; hover any point for exact values, including all same-day results.</p>
+    </div>
+    <div class="stat-grid reveal" id="stats"></div>
+    <div class="picker reveal">
+      <div class="preset-row" id="presets"><span class="preset-label">Panels</span></div>
+      <div class="picker-head">
+        <input type="search" id="chip-search" placeholder="Filter tests…" />
+        <span class="count" id="pick-count"></span>
+      </div>
+      <div class="chip-cloud" id="chips"></div>
+    </div>
+    <div class="chart-shell reveal">
+      <p class="chart-note" id="chart-note"></p>
+      <div id="big-chart"></div>
+    </div>
+  </section>
 
-  <h2>Evaluation history</h2>
-  <ul class="timeline" id="timeline"></ul>
+  <section class="section container" id="genetics">
+    <div class="section-head reveal">
+      <h2>Genetic testing</h2>
+      <p>Confirmed findings, and every panel run with the genes it covered.</p>
+    </div>
+    <div class="gene-grid" id="gene-results"></div>
+    <div id="panels"></div>
+  </section>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <span class="secure-badge">
+        <svg width="12" height="14" viewBox="0 0 12 14" fill="none" aria-hidden="true"><rect x="1" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 6V4a2.5 2.5 0 0 1 5 0v2" stroke="currentColor" stroke-width="1.4"/></svg>
+        Encrypted at rest (AES-256) · decrypted only in this browser · no data is transmitted
+      </span>
+      <span class="mono" id="generated"></span>
+    </div>
+  </footer>
 </main>
 
 <div class="tooltip" id="tooltip"></div>
@@ -173,191 +608,615 @@
   /* ---------- Decryption ---------- */
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-  async function decrypt(bundle, passphrase) {
-    const enc = new TextEncoder();
-    const baseKey = await crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
-    const key = await crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt: b64(bundle.salt), iterations: bundle.iterations, hash: "SHA-256" },
-      baseKey,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["decrypt"]
-    );
-    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(bundle.iv) }, key, b64(bundle.data));
-    return JSON.parse(new TextDecoder().decode(plaintext));
+  /* Chained PBKDF2: `rounds` sequential derivations, each feeding the next.
+     Matches scripts/build.js exactly; onRound fires after each completed
+     round, so progress reflects real work done, not a guess. */
+  /* The real work is fast, so each step is given a minimum on-screen dwell —
+     the percentages still track actual completed work, they just aren't
+     allowed to blink past faster than a person can read them. */
+  const ROUND_MIN_MS = 60;   // per key-derivation round
+  const STEP_MIN_MS = 400;   // per named step
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /**
+   * Chained PBKDF2 → AES-GCM decrypt, reporting each step.
+   * `report(stage, pct)` is awaited, so the caller controls pacing.
+   * A wrong phrase surfaces at the authenticate step (err.step = "auth"):
+   * AES-GCM only detects a bad key when it checks the auth tag.
+   */
+  async function decrypt(bundle, passphrase, report) {
+    const salt = b64(bundle.salt);
+    const rounds = bundle.rounds || 1;
+    let material = new TextEncoder().encode(passphrase);
+
+    await report("Deriving key from phrase", 12, { step: true });
+    for (let r = 0; r < rounds; r++) {
+      const t0 = performance.now();
+      const baseKey = await crypto.subtle.importKey("raw", material, "PBKDF2", false, ["deriveBits"]);
+      const roundSalt = new Uint8Array(salt.length + 1);
+      roundSalt.set(salt);
+      roundSalt[salt.length] = r;
+      material = new Uint8Array(
+        await crypto.subtle.deriveBits(
+          { name: "PBKDF2", salt: roundSalt, iterations: bundle.iterations, hash: "SHA-256" },
+          baseKey,
+          256
+        )
+      );
+      const frac = (r + 1) / rounds;
+      await report(`Deriving key — round ${r + 1} of ${rounds}`, 12 + frac * 48);
+      await sleep(Math.max(0, ROUND_MIN_MS - (performance.now() - t0)));
+    }
+
+    await report("Importing cipher key", 64, { step: true });
+    const key = await crypto.subtle.importKey("raw", material, { name: "AES-GCM" }, false, ["decrypt"]);
+
+    await report("Authenticating phrase", 74, { step: true });
+    let plaintext;
+    try {
+      plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(bundle.iv) }, key, b64(bundle.data));
+    } catch (e) {
+      const err = new Error("auth-failed");
+      err.step = "auth";
+      throw err;
+    }
+
+    await report("Decrypting records", 86, { step: true });
+    const text = new TextDecoder().decode(plaintext);
+
+    await report("Parsing health data", 93, { step: true });
+    return JSON.parse(text);
   }
 
   const form = document.getElementById("unlock-form");
   const errEl = document.getElementById("unlock-error");
-  let bundlePromise = fetch("data/health.enc.json").then((r) => {
-    if (!r.ok) throw new Error("data/health.enc.json not found — run scripts/build.js");
+  const statusPill = document.getElementById("status-pill");
+  /* On localhost, prefer the gitignored local copy (fixed passphrase
+     "password") and auto-unlock with it; the deployed site never has that
+     file and always requires the real passphrase. */
+  const isLocal = ["localhost", "127.0.0.1"].includes(location.hostname);
+  let bundlePromise = (isLocal
+    ? fetch("data/health.local.enc.json").then((r) => (r.ok ? r : fetch("data/health.enc.json")))
+    : fetch("data/health.enc.json")
+  ).then((r) => {
+    if (!r.ok) throw new Error("data/health.enc.json not found — run npm run build");
     return r.json();
   });
+
+  function unlockApp(payload) {
+    sessionStorage.removeItem("hd-locked");
+    document.getElementById("unlock").remove();
+    document.getElementById("app").hidden = false;
+    document.getElementById("nav").hidden = false;
+    statusPill.classList.add("ok");
+    statusPill.disabled = false;
+    statusPill.title = "Lock the dashboard — the decrypted data is discarded and the phrase is required again";
+    const statusText = statusPill.querySelector(".status-text");
+    statusText.textContent = "Unlocked";
+    statusPill.insertAdjacentHTML(
+      "beforeend",
+      `<svg class="lock-ic" width="11" height="13" viewBox="0 0 12 14" fill="none" aria-hidden="true"><rect x="1" y="6" width="10" height="7" rx="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M3.5 6V4a2.5 2.5 0 0 1 5 0" stroke="currentColor" stroke-width="1.4"/></svg>`
+    );
+    statusPill.addEventListener("mouseenter", () => { statusText.textContent = "Lock"; });
+    statusPill.addEventListener("mouseleave", () => { statusText.textContent = "Unlocked"; });
+    statusPill.addEventListener("click", () => {
+      // Reload with the lock flag: the decrypted payload only ever lives in
+      // this page's memory, so a reload discards every trace of it and the
+      // flag suppresses the localhost auto-unlock.
+      sessionStorage.setItem("hd-locked", "1");
+      location.reload();
+    });
+    render(payload);
+    observeReveals();
+  }
+
+  /* Progress UI — the percentage tracks real completed work:
+     fetch 0–8%, key-derivation rounds 8–88%, decrypt 88–94%, render 94–100%. */
+  const progressEl = document.getElementById("unlock-progress");
+  const fillEl = document.getElementById("progress-fill");
+  const pctEl = document.getElementById("progress-pct");
+  const stageEl = document.getElementById("progress-stage");
+  const input = document.getElementById("passphrase");
+
+  function setProgress(stage, pct) {
+    stageEl.textContent = stage;
+    pctEl.textContent = Math.round(pct) + "%";
+    fillEl.style.width = pct + "%";
+  }
+  function showProgress(show) {
+    progressEl.hidden = !show;
+    form.hidden = show;
+    document.querySelector("#unlock-card .lock-note").hidden = show;
+    if (show) {
+      progressEl.classList.remove("failed");
+      setProgress("Preparing…", 0);
+    }
+  }
+
+  /** Paint a step, then hold it long enough to be read. */
+  async function report(stage, pct, opts) {
+    setProgress(stage, pct);
+    await sleep(opts && opts.step ? STEP_MIN_MS : 0);
+  }
+
+  async function tryUnlock(phrase) {
+    showProgress(true);
+    try {
+      await report("Fetching encrypted data", 5, { step: true });
+      const bundle = await bundlePromise;
+      await report("Encrypted data loaded", 9, { step: true });
+
+      const payload = await decrypt(bundle, phrase, report);
+
+      await report("Rendering dashboard", 97, { step: true });
+      unlockApp(payload);
+      setProgress("Unlocked", 100);
+    } catch (err) {
+      // Freeze the bar where it failed and mark it, so the user sees which
+      // step rejected the phrase before the form returns.
+      progressEl.classList.add("failed");
+      stageEl.textContent =
+        err && err.step === "auth" ? "Authentication failed — incorrect phrase" : "Could not load encrypted data";
+      await sleep(1100);
+      throw err;
+    }
+  }
+
+  if (isLocal && sessionStorage.getItem("hd-locked") !== "1") {
+    tryUnlock("password").catch(() => {
+      // not the local copy — fall back to the form
+      showProgress(false);
+    });
+  }
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     errEl.textContent = "";
-    const btn = form.querySelector("button");
-    btn.disabled = true; btn.textContent = "Decrypting…";
+    input.classList.remove("bad");
     try {
-      const bundle = await bundlePromise;
-      const payload = await decrypt(bundle, document.getElementById("passphrase").value);
-      document.getElementById("unlock").remove();
-      document.getElementById("app").hidden = false;
-      render(payload);
+      await tryUnlock(input.value);
     } catch (err) {
+      showProgress(false);
       errEl.textContent =
-        err && /not found/.test(String(err.message)) ? err.message : "Decryption failed — wrong passphrase?";
-      btn.disabled = false; btn.textContent = "Unlock";
+        err && /not found/.test(String(err.message))
+          ? err.message
+          : "Incorrect decryption phrase — the data could not be unlocked.";
+      input.classList.add("bad");
+      input.focus();
+      input.select();
+      const card = document.getElementById("unlock-card");
+      card.classList.remove("shake");
+      void card.offsetWidth; // restart the animation
+      card.classList.add("shake");
     }
   });
 
-  /* ---------- Rendering ---------- */
+  function observeReveals() {
+    const io = new IntersectionObserver(
+      (entries) => entries.forEach((en) => { if (en.isIntersecting) { en.target.classList.add("visible"); io.unobserve(en.target); } }),
+      { threshold: 0.08 }
+    );
+    document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
+  }
+
   const fmtDate = (iso) =>
     new Date(iso + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 
-  function render(data) {
-    document.getElementById("generated").textContent =
-      "Data encrypted " + new Date(data.generatedAt).toLocaleString();
+  /* Categorical palette (dark-surface steps) — max 8 overlaid series. */
+  const PALETTE = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"];
+  const MAX_SERIES = PALETTE.length;
 
-    /* Blood tests — group rows by test name */
+  function render(data) {
+    const bloodwork = data.bloodwork || [];
     const byTest = new Map();
-    for (const row of data.bloodwork || []) {
-      if (!byTest.has(row.test)) byTest.set(row.test, { unit: row.unit, featured: row.featured, rows: [] });
+    for (const row of bloodwork) {
+      if (!byTest.has(row.test)) byTest.set(row.test, { unit: row.unit, featured: row.featured, group: row.group || "", rows: [] });
       byTest.get(row.test).rows.push(row);
     }
     for (const g of byTest.values()) g.rows.sort((a, b) => a.date.localeCompare(b.date));
+    const allDates = [...new Set(bloodwork.map((r) => r.date))].sort();
 
-    const chartsEl = document.getElementById("charts");
-    const countEl = document.getElementById("chart-count");
-    const btnFeat = document.getElementById("btn-featured");
-    const btnAll = document.getElementById("btn-all");
-
-    function draw(featuredOnly) {
-      btnFeat.setAttribute("aria-pressed", String(featuredOnly));
-      btnAll.setAttribute("aria-pressed", String(!featuredOnly));
-      chartsEl.textContent = "";
-      let shown = 0;
-      for (const [test, g] of byTest) {
-        if (featuredOnly && !g.featured) continue;
-        chartsEl.appendChild(chartCard(test, g));
-        shown++;
-      }
-      countEl.textContent = `${shown} of ${byTest.size} tests`;
+    /* Hero + stats — everything on this page is derived from the payload */
+    const name = (data.profile && data.profile.name) || "";
+    const dob = (data.profile && data.profile.dob) || "";
+    if (name) {
+      document.getElementById("hero-name").textContent = `${name}'s`;
+      document.getElementById("brand-main").textContent = dob ? `${name} · DOB ${dob}` : name;
+      document.getElementById("brand-sub").textContent = "Health Dashboard · Encrypted";
     }
-    btnFeat.addEventListener("click", () => draw(true));
-    btnAll.addEventListener("click", () => draw(false));
-    draw(true);
+    if (allDates.length) {
+      const spanYears =
+        (new Date(allDates[allDates.length - 1]) - new Date(allDates[0])) / (365.25 * 24 * 3600 * 1000);
+      const yearsText =
+        spanYears >= 1 ? `${(Math.round(spanYears * 2) / 2).toLocaleString()} years` : `${allDates.length} visits`;
+      document.getElementById("hero-sub").textContent =
+        `${yearsText[0].toUpperCase() + yearsText.slice(1)} of lab results, genetic findings, and reference ranges — all in one place, ready for review.`;
+    } else {
+      document.getElementById("hero-sub").textContent =
+        "Lab results, genetic findings, and reference ranges — all in one place, ready for review.";
+    }
+    document.getElementById("hero-meta").innerHTML =
+      `<span><strong>${bloodwork.length}</strong> results</span>` +
+      `<span><strong>${byTest.size}</strong> tests tracked</span>` +
+      `<span><strong>${allDates.length}</strong> draw dates</span>` +
+      `<span><strong>${allDates.length ? fmtDate(allDates[0]) + " – " + fmtDate(allDates[allDates.length - 1]) : "—"}</strong></span>`;
+    const featuredCount = [...byTest.values()].filter((g) => g.featured).length;
+    const stats = [
+      ["Total results", bloodwork.length, "individual lab values"],
+      ["Tests tracked", byTest.size, `${featuredCount} featured`],
+      ["Draw dates", allDates.length, allDates.length ? `${fmtDate(allDates[0])} → ${fmtDate(allDates[allDates.length - 1])}` : ""],
+      ["Panels run", (data.geneticsPanels || []).length, "hereditary testing"],
+    ];
+    document.getElementById("stats").innerHTML = stats
+      .map(([label, value, foot]) => `<div class="stat-card"><header>${label}</header><div class="stat-value">${value}</div><footer>${foot}</footer></div>`)
+      .join("");
+    document.getElementById("generated").textContent =
+      "Last updated " +
+      new Date(data.generatedAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 
-    /* Genetics */
-    const gtBody = document.querySelector("#genetics-table tbody");
-    for (const g of data.geneticsResults || []) {
-      const tr = document.createElement("tr");
-      for (const val of [g.gene, g.result, g.condition, fmtDate(g.dateTested), g.notes]) {
-        const td = document.createElement("td");
-        td.textContent = val ?? "";
-        tr.appendChild(td);
+    /* ---------- Series picker ---------- */
+    const chipsEl = document.getElementById("chips");
+    const searchEl = document.getElementById("chip-search");
+    const countEl = document.getElementById("pick-count");
+
+    // Featured tests first, then the rest alphabetically.
+    const testNames = [...byTest.keys()].sort((a, b) => {
+      const fa = byTest.get(a).featured, fb = byTest.get(b).featured;
+      if (fa !== fb) return fa ? -1 : 1;
+      return a.localeCompare(b);
+    });
+
+    // Stable color assignment: a selected test keeps its slot until deselected.
+    const colorOf = new Map();
+    const freeSlots = () => PALETTE.filter((c) => ![...colorOf.values()].includes(c));
+
+    const chipFor = new Map();
+    for (const name of testNames) {
+      const chip = document.createElement("button");
+      chip.className = "chip";
+      chip.type = "button";
+      chip.innerHTML = `<span class="chip-dot"></span><span></span>`;
+      chip.lastElementChild.textContent = name;
+      chip.addEventListener("click", () => toggle(name));
+      chipsEl.appendChild(chip);
+      chipFor.set(name, chip);
+    }
+
+    searchEl.addEventListener("input", () => {
+      const q = searchEl.value.trim().toLowerCase();
+      for (const [name, chip] of chipFor) chip.hidden = q && !name.toLowerCase().includes(q);
+    });
+
+    /* Preset panels — quick swaps to a common signature group.
+       Names match the Excel test names (unit stripped). */
+    const PRESETS = [
+      ["Iron", ["Iron", "Ferritin", "Iron Bind.Cap. (TIBC)", "UIBC", "Transferrin", "Iron Saturation"]],
+      ["Lipids", ["Cholesterol, Total", "HDL Cholesterol", "LDL Chol Calc (NIH)", "Triglycerides", "Non-HDL Cholesterol"]],
+      ["CBC", ["WBC", "RBC", "Hemoglobin", "Hematocrit", "Platelets"]],
+      ["Liver", ["ALT (SGPT)", "AST (SGOT)", "Alkaline Phosphatase", "Bilirubin, Total", "GGT", "Albumin"]],
+      ["Kidney", ["Creatinine", "BUN", "eGFR", "BUN/Creatinine Ratio"]],
+      ["Electrolytes", ["Sodium", "Potassium", "Chloride", "CO2", "Anion Gap"]],
+      ["Vitamins", ["Vitamin A, Serum", "Vitamin B12", "Vitamin D, 25-Hydroxy", "Vitamin E (Alpha Tocopherol)", "Vitamin E (Gamma Tocopherol)", "Vitamin K1", "Folate (Folic Acid), Serum"]],
+      ["Glucose", ["Glucose", "Avg. Glucose", "Hemoglobin A1c"]],
+    ];
+    /* Groups defined in the catalog (source/tests.csv) become presets too */
+    const groupMap = new Map();
+    for (const [testName, g] of byTest) {
+      if (!g.group) continue;
+      if (!groupMap.has(g.group)) groupMap.set(g.group, []);
+      groupMap.get(g.group).push(testName);
+    }
+    for (const [label, names] of groupMap) {
+      if (!PRESETS.some(([l]) => l === label)) PRESETS.push([label, names]);
+    }
+
+    const presetsEl = document.getElementById("presets");
+    const presetBtns = [];
+    for (const [label, names] of PRESETS) {
+      const present = names.filter((n) => byTest.has(n)).slice(0, MAX_SERIES);
+      if (present.length < 2) continue;
+      const btn = document.createElement("button");
+      btn.className = "preset";
+      btn.type = "button";
+      btn.textContent = label;
+      btn.title = present.join(", ");
+      const isActive = () =>
+        colorOf.size === present.length && present.every((n) => colorOf.has(n));
+      btn.addEventListener("click", () => {
+        colorOf.clear();
+        if (!btn.classList.contains("on")) {
+          for (const n of present) colorOf.set(n, freeSlots()[0]);
+        }
+        sync();
+      });
+      presetBtns.push({ btn, isActive });
+      presetsEl.appendChild(btn);
+    }
+
+    function toggle(name) {
+      if (colorOf.has(name)) {
+        colorOf.delete(name);
+      } else {
+        const free = freeSlots();
+        if (!free.length) return; // at capacity — deselect something first
+        colorOf.set(name, free[0]);
       }
-      gtBody.appendChild(tr);
+      sync();
+    }
+
+    function sync() {
+      for (const [name, chip] of chipFor) {
+        const c = colorOf.get(name);
+        chip.classList.toggle("on", Boolean(c));
+        chip.style.setProperty("--chip-c", c || "");
+        chip.disabled = !c && colorOf.size >= MAX_SERIES;
+      }
+      for (const { btn, isActive } of presetBtns) btn.classList.toggle("on", isActive());
+      countEl.textContent = `${colorOf.size} / ${MAX_SERIES} overlaid`;
+      drawChart();
+    }
+
+    /* ---------- The one big chart ---------- */
+    const W = 1120, H = 420, PAD = { top: 24, right: 24, bottom: 46, left: 74 };
+    const NS = "http://www.w3.org/2000/svg";
+    const tooltip = document.getElementById("tooltip");
+    const chartHost = document.getElementById("big-chart");
+    const noteEl = document.getElementById("chart-note");
+
+    function drawChart() {
+      chartHost.textContent = "";
+      const selected = [...colorOf.keys()];
+      if (!selected.length) {
+        noteEl.textContent = "";
+        chartHost.innerHTML = `<div class="chart-empty">Pick tests above to overlay their trends.</div>`;
+        return;
+      }
+
+      const units = [...new Set(selected.map((n) => byTest.get(n).unit || "—"))];
+      const sameUnit = units.length === 1;
+      const hasRangeNote =
+        selected.length === 1 && Array.isArray((data.ranges || {})[selected[0]]);
+      noteEl.textContent = sameUnit
+        ? `Values in ${units[0]}.` + (hasRangeNote ? " The shaded band is the reference range." : "")
+        : "Mixed units — each line is scaled to its own range. Hover any point for exact values.";
+
+      const svg = document.createElementNS(NS, "svg");
+      svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      svg.setAttribute("role", "img");
+      svg.setAttribute("aria-label", `Trend chart: ${selected.join(", ")}`);
+      const add = (name, attrs, parent = svg) => {
+        const el = document.createElementNS(NS, name);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        parent.appendChild(el);
+        return el;
+      };
+
+      /* X domain: dates present in the selected series, EQUALLY spaced by
+         visit order (not proportional to elapsed time). */
+      const dateSet = new Set();
+      for (const n of selected) for (const r of byTest.get(n).rows) dateSet.add(r.date);
+      const dates = [...dateSet].sort();
+      const dateIdx = new Map(dates.map((d, i) => [d, i]));
+      const sx = (d) =>
+        dates.length === 1
+          ? (PAD.left + W - PAD.right) / 2
+          : PAD.left + (dateIdx.get(d) / (dates.length - 1)) * (W - PAD.left - PAD.right);
+
+      /* Reference range — shown as a shaded band when one test is overlaid */
+      const range = selected.length === 1 ? (data.ranges || {})[selected[0]] : null;
+      const [refLo, refHi] = Array.isArray(range) ? range : [null, null];
+      const hasRange = refLo != null || refHi != null;
+
+      /* Y scale */
+      let syFor;
+      if (sameUnit) {
+        let vMin = Infinity, vMax = -Infinity;
+        for (const n of selected) for (const r of byTest.get(n).rows) { vMin = Math.min(vMin, r.value); vMax = Math.max(vMax, r.value); }
+        if (refLo != null) vMin = Math.min(vMin, refLo);
+        if (refHi != null) vMax = Math.max(vMax, refHi);
+        const pad = (vMax - vMin || Math.abs(vMax) || 1) * 0.1;
+        vMin -= pad; vMax += pad;
+        const sy = (v) => H - PAD.bottom - ((v - vMin) / (vMax - vMin)) * (H - PAD.top - PAD.bottom);
+        syFor = () => sy;
+        if (hasRange) {
+          const yTop = sy(refHi != null ? refHi : vMax);
+          const yBot = sy(refLo != null ? refLo : vMin);
+          add("rect", {
+            x: PAD.left, width: W - PAD.left - PAD.right,
+            y: yTop, height: Math.max(0, yBot - yTop),
+            fill: "rgba(74, 222, 128, 0.07)",
+          });
+          for (const [bound, y] of [[refHi, yTop], [refLo, yBot]]) {
+            if (bound == null) continue;
+            add("line", { x1: PAD.left, x2: W - PAD.right, y1: y, y2: y, stroke: "rgba(74, 222, 128, 0.35)", "stroke-width": 1, "stroke-dasharray": "3 5" });
+          }
+        }
+        // gridlines + ticks
+        const steps = 5;
+        for (let i = 0; i <= steps; i++) {
+          const v = vMin + ((vMax - vMin) * i) / steps;
+          add("line", { x1: PAD.left, x2: W - PAD.right, y1: sy(v), y2: sy(v), stroke: "rgba(255,255,255,0.07)", "stroke-width": 1 });
+          const t = add("text", { x: PAD.left - 8, y: sy(v) + 3.5, "text-anchor": "end", "font-size": 13.5, fill: "#8b93a7", "font-family": "'JetBrains Mono', ui-monospace, monospace" });
+          t.textContent = formatTick(v);
+        }
+      } else {
+        // per-series min–max normalization
+        const scale = new Map();
+        for (const n of selected) {
+          const vs = byTest.get(n).rows.map((r) => r.value);
+          const lo = Math.min(...vs), hi = Math.max(...vs);
+          scale.set(n, { lo, hi });
+        }
+        syFor = (n) => {
+          const { lo, hi } = scale.get(n);
+          return (v) => {
+            const f = hi === lo ? 0.5 : (v - lo) / (hi - lo);
+            return H - PAD.bottom - f * (H - PAD.top - PAD.bottom);
+          };
+        };
+        for (let i = 0; i <= 4; i++) {
+          const y = PAD.top + ((H - PAD.top - PAD.bottom) * i) / 4;
+          add("line", { x1: PAD.left, x2: W - PAD.right, y1: y, y2: y, stroke: "rgba(255,255,255,0.07)", "stroke-width": 1 });
+        }
+      }
+
+      /* X ticks at visit dates, thinned so labels never collide (~70px apart).
+         The last date always wins; earlier ticks too close to it are dropped. */
+      const lastX = sx(dates[dates.length - 1]);
+      let prevX = -Infinity;
+      dates.forEach((d, i) => {
+        const x = sx(d);
+        const isLast = i === dates.length - 1;
+        if (!isLast && (x - prevX < 70 || lastX - x < 70)) return;
+        prevX = x;
+        add("line", { x1: x, x2: x, y1: H - PAD.bottom, y2: H - PAD.bottom + 5, stroke: "rgba(255,255,255,0.14)", "stroke-width": 1 });
+        const t = add("text", {
+          x, y: H - PAD.bottom + 20,
+          "text-anchor": i === 0 ? "start" : isLast ? "end" : "middle",
+          "font-size": 13.5, fill: "#8b93a7", "font-family": "'JetBrains Mono', ui-monospace, monospace",
+        });
+        t.textContent = new Date(d + "T00:00:00").toLocaleDateString(undefined, { year: "2-digit", month: "short", day: "numeric" });
+      });
+      add("line", { x1: PAD.left, x2: W - PAD.right, y1: H - PAD.bottom, y2: H - PAD.bottom, stroke: "rgba(255,255,255,0.14)", "stroke-width": 1 });
+
+      /* All selected values at one visit date — for the shared-point tooltip */
+      const valuesAt = (date, hovered) =>
+        selected
+          .map((name) => {
+            const row = byTest.get(name).rows.find((r) => r.date === date);
+            return row ? { name, row, unit: byTest.get(name).unit, color: colorOf.get(name), hot: name === hovered } : null;
+          })
+          .filter(Boolean);
+
+      /* Series */
+      for (const n of selected) {
+        const g = byTest.get(n);
+        const color = colorOf.get(n);
+        const sy = syFor(n);
+        const pts = g.rows.map((r) => ({ x: sx(r.date), y: sy(r.value), r }));
+        const seriesG = add("g", { class: "series" });
+
+        // segments: monotone cubic curves (Fritsch–Carlson tangents — smooth,
+        // but mathematically unable to overshoot the data in x or y), dashed
+        // when a visit between the two endpoints lacks this test
+        const np = pts.length;
+        const h = [], delta = [];
+        for (let i = 0; i < np - 1; i++) {
+          h.push(pts[i + 1].x - pts[i].x || 1);
+          delta.push((pts[i + 1].y - pts[i].y) / (h[i] || 1));
+        }
+        const m = new Array(np).fill(0);
+        if (np > 1) {
+          m[0] = delta[0];
+          m[np - 1] = delta[np - 2];
+          for (let i = 1; i < np - 1; i++) {
+            if (delta[i - 1] * delta[i] <= 0) { m[i] = 0; continue; }
+            const w1 = 2 * h[i] + h[i - 1], w2 = h[i] + 2 * h[i - 1];
+            m[i] = (w1 + w2) / (w1 / delta[i - 1] + w2 / delta[i]);
+          }
+        }
+        for (let i = 1; i < np; i++) {
+          const p1 = pts[i - 1], p2 = pts[i];
+          const dx = (p2.x - p1.x) / 3;
+          const c1x = p1.x + dx, c1y = p1.y + m[i - 1] * dx;
+          const c2x = p2.x - dx, c2y = p2.y - m[i] * dx;
+          const a = g.rows[i - 1].date, b = g.rows[i].date;
+          const gap = dates.some((d) => d > a && d < b);
+          add("path", {
+            class: "line",
+            d: `M${p1.x},${p1.y}C${c1x},${c1y} ${c2x},${c2y} ${p2.x},${p2.y}`,
+            fill: "none", stroke: color, "stroke-width": 2.25,
+            "stroke-linecap": "round",
+            ...(gap ? { "stroke-dasharray": "5 7", "stroke-opacity": 0.75 } : {}),
+          }, seriesG);
+        }
+
+        for (const p of pts) {
+          add("circle", { class: "dot", cx: p.x, cy: p.y, r: 4.5, fill: color, stroke: "#0f1424", "stroke-width": 2 }, seriesG);
+          const hit = add("circle", { cx: p.x, cy: p.y, r: 13, fill: "transparent" }, seriesG);
+          hit.style.cursor = "pointer";
+          hit.addEventListener("mousemove", (e) => {
+            const entries = valuesAt(p.r.date, n);
+            tooltip.style.display = "block";
+            tooltip.innerHTML = `<div class="tt-date"></div>`;
+            tooltip.querySelector(".tt-date").textContent = fmtDate(p.r.date);
+            for (const en of entries) {
+              const row = document.createElement("div");
+              row.className = "tt-row" + (en.hot ? " hot" : "");
+              row.innerHTML = `<span class="tt-swatch"></span><span class="tt-name"></span><span class="tt-val"></span>`;
+              row.querySelector(".tt-swatch").style.background = en.color;
+              row.querySelector(".tt-name").textContent = en.name;
+              row.querySelector(".tt-val").textContent = `${en.row.value}${en.unit ? " " + en.unit : ""}`;
+              tooltip.appendChild(row);
+            }
+            tooltip.style.left = Math.min(e.clientX + 14, window.innerWidth - 280) + "px";
+            tooltip.style.top = e.clientY + 14 + "px";
+          });
+          hit.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
+        }
+      }
+
+      chartHost.appendChild(svg);
+    }
+
+    /* Default selection: first four featured tests */
+    for (const name of testNames.filter((n) => byTest.get(n).featured).slice(0, 4)) {
+      colorOf.set(name, freeSlots()[0]);
+    }
+    sync();
+
+    /* ---------- Genetics ---------- */
+    const geneEl = document.getElementById("gene-results");
+    for (const g of data.geneticsResults || []) {
+      const positive = /pathogenic|positive|detected/i.test(g.result || "");
+      const card = document.createElement("div");
+      card.className = "gene-card";
+      card.innerHTML =
+        `<div class="gene-name">${positive ? '<span class="gene-flash"></span>' : ""}<span class="gn"></span></div>` +
+        `<span class="gene-tag"></span>` +
+        `<div class="gene-cond"></div><div class="gene-notes"></div><div class="gene-date"></div>`;
+      card.querySelector(".gn").textContent = g.gene;
+      card.querySelector(".gene-tag").textContent = g.result;
+      card.querySelector(".gene-cond").textContent = g.condition || "";
+      card.querySelector(".gene-notes").textContent = g.notes || "";
+      card.querySelector(".gene-date").textContent = "tested " + fmtDate(g.dateTested);
+      geneEl.appendChild(card);
     }
     const panelsEl = document.getElementById("panels");
     for (const p of data.geneticsPanels || []) {
+      const positive = new Set(p.positive || []);
       const det = document.createElement("details");
       det.className = "panel";
+      if (positive.size) det.open = true;
       const sum = document.createElement("summary");
-      sum.textContent = `${p.panel} — ${p.genes.length} gene${p.genes.length === 1 ? "" : "s"}`;
+      sum.textContent = p.panel;
+      const cnt = document.createElement("span");
+      cnt.className = "gene-count";
+      cnt.textContent = `${p.genes.length} genes`;
+      sum.appendChild(cnt);
+      if (positive.size) {
+        const hits = document.createElement("span");
+        hits.className = "gene-hits";
+        hits.innerHTML = `<span class="gene-flash"></span>`;
+        hits.append(`${positive.size} detected`);
+        sum.appendChild(hits);
+      }
       const div = document.createElement("div");
       div.className = "genes";
-      div.textContent = p.genes.join(", ");
+      p.genes.forEach((gene, i) => {
+        if (i) div.append("  ·  ");
+        if (positive.has(gene)) {
+          const s = document.createElement("span");
+          s.className = "gene-pos";
+          s.textContent = gene;
+          div.appendChild(s);
+        } else {
+          div.append(gene);
+        }
+      });
       det.append(sum, div);
       panelsEl.appendChild(det);
     }
-
-    /* Timeline */
-    const tl = document.getElementById("timeline");
-    const evals = (data.evaluations || []).slice().sort((a, b) => b.date.localeCompare(a.date));
-    for (const ev of evals) {
-      const li = document.createElement("li");
-      li.innerHTML = `<div class="tl-head"><span class="tl-date"></span><span class="tl-type"></span></div><div class="tl-summary"></div><div class="tl-details"></div>`;
-      li.querySelector(".tl-date").textContent = fmtDate(ev.date);
-      li.querySelector(".tl-type").textContent = ev.type;
-      li.querySelector(".tl-summary").textContent = ev.summary || "";
-      li.querySelector(".tl-details").textContent = ev.details || "";
-      tl.appendChild(li);
-    }
-  }
-
-  /* ---------- One small-multiple line chart ---------- */
-  const W = 320, H = 180, PAD = { top: 12, right: 12, bottom: 24, left: 48 };
-  const tooltip = document.getElementById("tooltip");
-  const NS = "http://www.w3.org/2000/svg";
-
-  function chartCard(test, g) {
-    const rows = g.rows;
-    const card = document.createElement("div");
-    card.className = "card";
-    card.innerHTML = `<h3></h3><p class="meta"></p>`;
-    card.querySelector("h3").textContent = test;
-    card.querySelector(".meta").textContent = (g.unit || "—") + ` · ${rows.length} result${rows.length === 1 ? "" : "s"}`;
-
-    const xs = rows.map((r) => new Date(r.date + "T00:00:00").getTime());
-    const ys = rows.map((r) => r.value);
-    let yMin = Math.min(...ys), yMax = Math.max(...ys);
-    const yPad = (yMax - yMin || Math.abs(yMax) || 1) * 0.15;
-    yMin -= yPad; yMax += yPad;
-    const xMin = Math.min(...xs), xMax = Math.max(...xs);
-
-    const sx = (t) => PAD.left + ((t - xMin) / (xMax - xMin || 1)) * (W - PAD.left - PAD.right);
-    const sy = (v) => H - PAD.bottom - ((v - yMin) / (yMax - yMin)) * (H - PAD.top - PAD.bottom);
-
-    const svg = document.createElementNS(NS, "svg");
-    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-    svg.setAttribute("role", "img");
-    svg.setAttribute("aria-label", `${test} trend, ${rows.length} results`);
-    const add = (name, attrs) => {
-      const el = document.createElementNS(NS, name);
-      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-      svg.appendChild(el);
-      return el;
-    };
-
-    for (const v of [yMin + yPad, (yMin + yMax) / 2, yMax - yPad]) {
-      add("line", { x1: PAD.left, x2: W - PAD.right, y1: sy(v), y2: sy(v), stroke: "var(--grid)", "stroke-width": 1 });
-      const t = add("text", { x: PAD.left - 6, y: sy(v) + 4, "text-anchor": "end", "font-size": 10, fill: "var(--text-muted)" });
-      t.textContent = formatTick(v);
-    }
-    for (const [t, anchor] of [[xMin, "start"], [xMax, "end"]]) {
-      const el = add("text", { x: sx(t), y: H - 6, "text-anchor": anchor, "font-size": 10, fill: "var(--text-muted)" });
-      el.textContent = new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "short" });
-    }
-    add("line", { x1: PAD.left, x2: W - PAD.right, y1: H - PAD.bottom, y2: H - PAD.bottom, stroke: "var(--axis)", "stroke-width": 1 });
-
-    if (rows.length > 1) {
-      add("path", {
-        d: rows.map((r, i) => `${i ? "L" : "M"}${sx(xs[i])},${sy(r.value)}`).join(""),
-        fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round",
-      });
-    }
-
-    rows.forEach((r, i) => {
-      add("circle", {
-        cx: sx(xs[i]), cy: sy(r.value), r: 4,
-        fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2,
-      });
-      const hit = add("circle", { cx: sx(xs[i]), cy: sy(r.value), r: 12, fill: "transparent" });
-      hit.addEventListener("mousemove", (e) => {
-        tooltip.style.display = "block";
-        tooltip.innerHTML = `<div class="tt-value"></div><div class="tt-date"></div>`;
-        tooltip.querySelector(".tt-value").textContent = `${test}: ${r.value}${g.unit ? " " + g.unit : ""}`;
-        tooltip.querySelector(".tt-date").textContent = fmtDate(r.date);
-        tooltip.style.left = Math.min(e.clientX + 12, window.innerWidth - 200) + "px";
-        tooltip.style.top = e.clientY + 12 + "px";
-      });
-      hit.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
-    });
-
-    card.appendChild(svg);
-    return card;
   }
 
   function formatTick(v) {

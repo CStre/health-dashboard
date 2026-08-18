@@ -16,3 +16,4 @@ raw/
 
 # Local plaintext sources — never committed; encrypted into data/health.enc.json by scripts/build.js
 source/
+data/health.local.enc.json
