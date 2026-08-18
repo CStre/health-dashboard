@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Health Dashboard</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11, 11, 11, 0.10);
+    --series-1:       #2a78d6;
+    --flag:           #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255, 255, 255, 0.10);
+      --series-1:       #3987e5;
+      --flag:           #e66767;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); margin: 0 0 24px; }
+  h2 { font-size: 1.1rem; margin: 40px 0 12px; }
+
+  /* Unlock screen */
+  #unlock {
+    max-width: 400px; margin: 15vh auto 0; padding: 28px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+  }
+  #unlock h1 { font-size: 1.2rem; }
+  #unlock p { color: var(--text-secondary); font-size: 0.9rem; }
+  #unlock form { display: flex; gap: 8px; margin-top: 12px; }
+  #unlock input[type="password"] {
+    flex: 1; padding: 10px 12px; font-size: 1rem;
+    border: 1px solid var(--axis); border-radius: 8px;
+    background: var(--page); color: var(--text-primary);
+  }
+  #unlock button {
+    padding: 10px 18px; font-size: 1rem; border: none; border-radius: 8px;
+    background: var(--series-1); color: #fff; cursor: pointer;
+  }
+  #unlock .error { color: var(--flag); font-size: 0.85rem; min-height: 1.2em; margin: 8px 0 0; }
+
+  /* Filter row */
+  .filters { display: flex; gap: 8px; align-items: center; margin: 0 0 16px; flex-wrap: wrap; }
+  .filters .toggle {
+    display: inline-flex; border: 1px solid var(--axis); border-radius: 8px; overflow: hidden;
+  }
+  .filters .toggle button {
+    padding: 6px 14px; border: none; background: var(--surface-1);
+    color: var(--text-secondary); font-size: 0.85rem; cursor: pointer;
+  }
+  .filters .toggle button[aria-pressed="true"] {
+    background: var(--series-1); color: #fff;
+  }
+  .filters .count { color: var(--text-muted); font-size: 0.85rem; }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .card h3 { margin: 0 0 2px; font-size: 0.95rem; }
+  .card .meta { color: var(--text-muted); font-size: 0.8rem; margin: 0 0 8px; }
+  .card svg { display: block; width: 100%; height: auto; }
+
+  .tooltip {
+    position: fixed; pointer-events: none; display: none; z-index: 10;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    padding: 6px 10px; font-size: 0.8rem;
+  }
+  .tooltip .tt-value { font-weight: 600; }
+  .tooltip .tt-date { color: var(--text-secondary); }
+
+  table {
+    width: 100%; border-collapse: collapse;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+  }
+  th, td { text-align: left; padding: 10px 12px; border-top: 1px solid var(--grid); vertical-align: top; }
+  thead th { border-top: none; font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; }
+
+  details.panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; margin-bottom: 8px; }
+  details.panel summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+  details.panel .genes { color: var(--text-secondary); font-size: 0.85rem; margin: 8px 0 4px; }
+
+  .timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .timeline li { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .timeline .tl-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .timeline .tl-date { color: var(--text-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  .timeline .tl-type { font-weight: 600; }
+  .timeline .tl-details { color: var(--text-secondary); font-size: 0.85rem; margin-top: 4px; }
+
+  .note { color: var(--text-muted); font-size: 0.8rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="unlock">
+  <h1>Health Dashboard</h1>
+  <p>This data is encrypted. Enter the passphrase to decrypt it in your browser — nothing is sent anywhere.</p>
+  <form id="unlock-form">
+    <input type="password" id="passphrase" autocomplete="current-password" placeholder="Passphrase" autofocus />
+    <button type="submit">Unlock</button>
+  </form>
+  <p class="error" id="unlock-error"></p>
+</div>
+
+<main id="app" hidden>
+  <h1>Health Dashboard</h1>
+  <p class="subtitle" id="generated"></p>
+
+  <h2>Blood tests</h2>
+  <div class="filters">
+    <div class="toggle" role="group" aria-label="Which tests to show">
+      <button id="btn-featured" aria-pressed="true">Featured</button>
+      <button id="btn-all" aria-pressed="false">All tests</button>
+    </div>
+    <span class="count" id="chart-count"></span>
+  </div>
+  <div class="chart-grid" id="charts"></div>
+
+  <h2>Genetic testing</h2>
+  <table id="genetics-table">
+    <thead><tr><th>Gene</th><th>Result</th><th>Condition</th><th>Date</th><th>Notes</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <h2 style="font-size:0.95rem">Panels run (genes covered)</h2>
+  <div id="panels"></div>
+
+  <h2>Evaluation history</h2>
+  <ul class="timeline" id="timeline"></ul>
+</main>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Decryption ---------- */
+  const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+
+  async function decrypt(bundle, passphrase) {
+    const enc = new TextEncoder();
+    const baseKey = await crypto.subtle.importKey("raw", enc.encode(passphrase), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: b64(bundle.salt), iterations: bundle.iterations, hash: "SHA-256" },
+      baseKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["decrypt"]
+    );
+    const plaintext = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(bundle.iv) }, key, b64(bundle.data));
+    return JSON.parse(new TextDecoder().decode(plaintext));
+  }
+
+  const form = document.getElementById("unlock-form");
+  const errEl = document.getElementById("unlock-error");
+  let bundlePromise = fetch("data/health.enc.json").then((r) => {
+    if (!r.ok) throw new Error("data/health.enc.json not found — run scripts/build.js");
+    return r.json();
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errEl.textContent = "";
+    const btn = form.querySelector("button");
+    btn.disabled = true; btn.textContent = "Decrypting…";
+    try {
+      const bundle = await bundlePromise;
+      const payload = await decrypt(bundle, document.getElementById("passphrase").value);
+      document.getElementById("unlock").remove();
+      document.getElementById("app").hidden = false;
+      render(payload);
+    } catch (err) {
+      errEl.textContent =
+        err && /not found/.test(String(err.message)) ? err.message : "Decryption failed — wrong passphrase?";
+      btn.disabled = false; btn.textContent = "Unlock";
+    }
+  });
+
+  /* ---------- Rendering ---------- */
+  const fmtDate = (iso) =>
+    new Date(iso + "T00:00:00").toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+
+  function render(data) {
+    document.getElementById("generated").textContent =
+      "Data encrypted " + new Date(data.generatedAt).toLocaleString();
+
+    /* Blood tests — group rows by test name */
+    const byTest = new Map();
+    for (const row of data.bloodwork || []) {
+      if (!byTest.has(row.test)) byTest.set(row.test, { unit: row.unit, featured: row.featured, rows: [] });
+      byTest.get(row.test).rows.push(row);
+    }
+    for (const g of byTest.values()) g.rows.sort((a, b) => a.date.localeCompare(b.date));
+
+    const chartsEl = document.getElementById("charts");
+    const countEl = document.getElementById("chart-count");
+    const btnFeat = document.getElementById("btn-featured");
+    const btnAll = document.getElementById("btn-all");
+
+    function draw(featuredOnly) {
+      btnFeat.setAttribute("aria-pressed", String(featuredOnly));
+      btnAll.setAttribute("aria-pressed", String(!featuredOnly));
+      chartsEl.textContent = "";
+      let shown = 0;
+      for (const [test, g] of byTest) {
+        if (featuredOnly && !g.featured) continue;
+        chartsEl.appendChild(chartCard(test, g));
+        shown++;
+      }
+      countEl.textContent = `${shown} of ${byTest.size} tests`;
+    }
+    btnFeat.addEventListener("click", () => draw(true));
+    btnAll.addEventListener("click", () => draw(false));
+    draw(true);
+
+    /* Genetics */
+    const gtBody = document.querySelector("#genetics-table tbody");
+    for (const g of data.geneticsResults || []) {
+      const tr = document.createElement("tr");
+      for (const val of [g.gene, g.result, g.condition, fmtDate(g.dateTested), g.notes]) {
+        const td = document.createElement("td");
+        td.textContent = val ?? "";
+        tr.appendChild(td);
+      }
+      gtBody.appendChild(tr);
+    }
+    const panelsEl = document.getElementById("panels");
+    for (const p of data.geneticsPanels || []) {
+      const det = document.createElement("details");
+      det.className = "panel";
+      const sum = document.createElement("summary");
+      sum.textContent = `${p.panel} — ${p.genes.length} gene${p.genes.length === 1 ? "" : "s"}`;
+      const div = document.createElement("div");
+      div.className = "genes";
+      div.textContent = p.genes.join(", ");
+      det.append(sum, div);
+      panelsEl.appendChild(det);
+    }
+
+    /* Timeline */
+    const tl = document.getElementById("timeline");
+    const evals = (data.evaluations || []).slice().sort((a, b) => b.date.localeCompare(a.date));
+    for (const ev of evals) {
+      const li = document.createElement("li");
+      li.innerHTML = `<div class="tl-head"><span class="tl-date"></span><span class="tl-type"></span></div><div class="tl-summary"></div><div class="tl-details"></div>`;
+      li.querySelector(".tl-date").textContent = fmtDate(ev.date);
+      li.querySelector(".tl-type").textContent = ev.type;
+      li.querySelector(".tl-summary").textContent = ev.summary || "";
+      li.querySelector(".tl-details").textContent = ev.details || "";
+      tl.appendChild(li);
+    }
+  }
+
+  /* ---------- One small-multiple line chart ---------- */
+  const W = 320, H = 180, PAD = { top: 12, right: 12, bottom: 24, left: 48 };
+  const tooltip = document.getElementById("tooltip");
+  const NS = "http://www.w3.org/2000/svg";
+
+  function chartCard(test, g) {
+    const rows = g.rows;
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `<h3></h3><p class="meta"></p>`;
+    card.querySelector("h3").textContent = test;
+    card.querySelector(".meta").textContent = (g.unit || "—") + ` · ${rows.length} result${rows.length === 1 ? "" : "s"}`;
+
+    const xs = rows.map((r) => new Date(r.date + "T00:00:00").getTime());
+    const ys = rows.map((r) => r.value);
+    let yMin = Math.min(...ys), yMax = Math.max(...ys);
+    const yPad = (yMax - yMin || Math.abs(yMax) || 1) * 0.15;
+    yMin -= yPad; yMax += yPad;
+    const xMin = Math.min(...xs), xMax = Math.max(...xs);
+
+    const sx = (t) => PAD.left + ((t - xMin) / (xMax - xMin || 1)) * (W - PAD.left - PAD.right);
+    const sy = (v) => H - PAD.bottom - ((v - yMin) / (yMax - yMin)) * (H - PAD.top - PAD.bottom);
+
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", `${test} trend, ${rows.length} results`);
+    const add = (name, attrs) => {
+      const el = document.createElementNS(NS, name);
+      for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+      svg.appendChild(el);
+      return el;
+    };
+
+    for (const v of [yMin + yPad, (yMin + yMax) / 2, yMax - yPad]) {
+      add("line", { x1: PAD.left, x2: W - PAD.right, y1: sy(v), y2: sy(v), stroke: "var(--grid)", "stroke-width": 1 });
+      const t = add("text", { x: PAD.left - 6, y: sy(v) + 4, "text-anchor": "end", "font-size": 10, fill: "var(--text-muted)" });
+      t.textContent = formatTick(v);
+    }
+    for (const [t, anchor] of [[xMin, "start"], [xMax, "end"]]) {
+      const el = add("text", { x: sx(t), y: H - 6, "text-anchor": anchor, "font-size": 10, fill: "var(--text-muted)" });
+      el.textContent = new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "short" });
+    }
+    add("line", { x1: PAD.left, x2: W - PAD.right, y1: H - PAD.bottom, y2: H - PAD.bottom, stroke: "var(--axis)", "stroke-width": 1 });
+
+    if (rows.length > 1) {
+      add("path", {
+        d: rows.map((r, i) => `${i ? "L" : "M"}${sx(xs[i])},${sy(r.value)}`).join(""),
+        fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round",
+      });
+    }
+
+    rows.forEach((r, i) => {
+      add("circle", {
+        cx: sx(xs[i]), cy: sy(r.value), r: 4,
+        fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2,
+      });
+      const hit = add("circle", { cx: sx(xs[i]), cy: sy(r.value), r: 12, fill: "transparent" });
+      hit.addEventListener("mousemove", (e) => {
+        tooltip.style.display = "block";
+        tooltip.innerHTML = `<div class="tt-value"></div><div class="tt-date"></div>`;
+        tooltip.querySelector(".tt-value").textContent = `${test}: ${r.value}${g.unit ? " " + g.unit : ""}`;
+        tooltip.querySelector(".tt-date").textContent = fmtDate(r.date);
+        tooltip.style.left = Math.min(e.clientX + 12, window.innerWidth - 200) + "px";
+        tooltip.style.top = e.clientY + 12 + "px";
+      });
+      hit.addEventListener("mouseleave", () => { tooltip.style.display = "none"; });
+    });
+
+    card.appendChild(svg);
+    return card;
+  }
+
+  function formatTick(v) {
+    const a = Math.abs(v);
+    if (a >= 100) return Math.round(v).toLocaleString();
+    if (a >= 1) return Number(v.toFixed(1));
+    return Number(v.toFixed(2));
+  }
+})();
+</script>
+</body>
+</html>
