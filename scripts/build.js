@@ -54,18 +54,49 @@ function parseDate(s) {
   return `${y}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
 }
 
+/** Loose key for name matching: case/punctuation/spacing insensitive. */
+const normalizeName = (s) => String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+
+/**
+ * Build canonical-name lookup from the catalog: every test's own name plus
+ * each of its aliases maps to the canonical name. This is what lets a result
+ * logged as "A1c", "HbA1c", or "hemoglobin a1c" all land on one test.
+ */
+function buildAliasIndex(catalog) {
+  const index = new Map();
+  const collisions = [];
+  for (const [name, cfg] of Object.entries(catalog)) {
+    const keys = [name, ...(cfg.aliases || [])];
+    for (const k of keys) {
+      const norm = normalizeName(k);
+      if (index.has(norm) && index.get(norm) !== name) {
+        collisions.push(`"${k}" → ${index.get(norm)} vs ${name}`);
+        continue;
+      }
+      index.set(norm, name);
+    }
+  }
+  return { index, collisions };
+}
+
 /** results.json (visits keyed by date) + tests.json (catalog) → flat rows */
-function buildBloodwork(visits, catalog) {
+function buildBloodwork(visits, catalog, aliasIndex) {
   const rows = [];
   const skipped = [];
   const uncataloged = new Set();
+  const resolved = [];
   for (const [rawDate, tests] of Object.entries(visits)) {
     const date = parseDate(rawDate);
     if (!date) {
       skipped.push(`bad visit date: "${rawDate}"`);
       continue;
     }
-    for (const [test, rawValue] of Object.entries(tests)) {
+    for (const [rawTest, rawValue] of Object.entries(tests)) {
+      // Canonicalize the name through the alias index so near-miss spellings
+      // merge into the parent test instead of creating a duplicate series.
+      const test = aliasIndex.get(normalizeName(rawTest)) || rawTest;
+      if (test !== rawTest) resolved.push(`"${rawTest}" → "${test}"`);
+
       const value =
         typeof rawValue === "number"
           ? rawValue
@@ -87,7 +118,7 @@ function buildBloodwork(visits, catalog) {
     }
   }
   rows.sort((a, b) => a.date.localeCompare(b.date) || a.test.localeCompare(b.test));
-  return { rows, skipped, uncataloged: [...uncataloged] };
+  return { rows, skipped, uncataloged: [...uncataloged], resolved };
 }
 
 /* ---------- Passphrase + encryption ---------- */
@@ -144,17 +175,42 @@ async function main() {
   const catalog = readJson("tests.json", {});
   const visits = readJson("results.json", {});
   const genetics = readJson("genetics.json", { findings: [], panels: [] });
+  const panelCfg = readJson("panels.json", {});
+  delete panelCfg._comment;
 
-  const { rows: bloodwork, skipped, uncataloged } = buildBloodwork(visits, catalog);
+  const { index: aliasIndex, collisions } = buildAliasIndex(catalog);
+  const { rows: bloodwork, skipped, uncataloged, resolved } = buildBloodwork(visits, catalog, aliasIndex);
   if (!bloodwork.length) {
     console.error("No results found in source/results.json — nothing to build.");
     process.exit(1);
   }
 
   const ranges = {};
+  const aliases = {};
   for (const [name, c] of Object.entries(catalog)) {
     const [lo, hi] = Array.isArray(c.range) ? c.range : [null, null];
     if (lo != null || hi != null) ranges[name] = [lo, hi];
+    if (c.aliases && c.aliases.length) aliases[name] = c.aliases;
+  }
+
+  /* Panels: explicit config first, then any catalog `group` as its own panel.
+     A config entry is either ["Test", …] or { view, tests } — view "table"
+     means that panel is shown tabulated only, no chart. */
+  const present = new Set(bloodwork.map((r) => r.test));
+  const panels = {};
+  for (const [label, cfg] of Object.entries(panelCfg)) {
+    const members = Array.isArray(cfg) ? cfg : cfg.tests || [];
+    const view = Array.isArray(cfg) ? "both" : cfg.view || "both";
+    const hit = members.filter((m) => present.has(m));
+    if (hit.length >= 2) panels[label] = { view, tests: hit };
+  }
+  const byGroup = {};
+  for (const r of bloodwork) {
+    if (!r.group) continue;
+    (byGroup[r.group] = byGroup[r.group] || new Set()).add(r.test);
+  }
+  for (const [label, set] of Object.entries(byGroup)) {
+    if (!panels[label] && set.size >= 2) panels[label] = { view: "both", tests: [...set] };
   }
 
   const payload = {
@@ -162,6 +218,8 @@ async function main() {
     profile: readJson("profile.json", {}),
     bloodwork,
     ranges,
+    aliases,
+    panels,
     geneticsPanels: genetics.panels || [],
     geneticsResults: genetics.findings || [],
     evaluations: readJson("evaluations.json", []),
@@ -187,8 +245,16 @@ async function main() {
   const dates = new Set(bloodwork.map((r) => r.date)).size;
   console.log(`Encrypted ${bloodwork.length} results · ${tests} tests · ${dates} visits → ${path.relative(ROOT, outPath)}`);
   console.log(`Local copy (passphrase "${LOCAL_PASSPHRASE}", gitignored) → ${path.relative(ROOT, localPath)}`);
+  console.log(`Panels: ${Object.keys(payload.panels).join(", ")}`);
+  if (resolved.length) {
+    const uniq = [...new Set(resolved)];
+    console.log(`Alias-resolved names: ${uniq.join(", ")}`);
+  }
+  if (collisions.length) {
+    console.log(`ALIAS COLLISIONS (ignored, first wins): ${collisions.join("; ")}`);
+  }
   if (uncataloged.length) {
-    console.log(`NOT in source/tests.json (add entries for unit/group/range): ${uncataloged.join(", ")}`);
+    console.log(`NOT in source/tests.json (add entries for unit/group/range/aliases): ${uncataloged.join(", ")}`);
   }
   const positives = (genetics.panels || []).flatMap((p) => (p.positive || []).map((g) => `${g} [${p.panel}]`));
   if (positives.length) console.log("Detected genes:", positives.join(", "));

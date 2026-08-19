@@ -50,8 +50,9 @@ redeploys.
 
 | Path | Purpose |
 |---|---|
-| `source/results.json` | **The measurements** — `{ "YYYY-MM-DD": { "Test Name": value, … }, … }`. |
-| `source/tests.json` | **The test catalog** — `{ "Test Name": { "unit", "group", "featured", "range": [low, high] } }`. Controls unit, grouping (groups become preset buttons, e.g. PFAS Exposure), the featured flag, and the reference range shaded on single-test charts. `null` in `range` = unbounded on that side. |
+| `source/results.json` | **The measurements** — `{ "YYYY-MM-DD": { "Test Name": value, … }, … }`. Test names may be any alias; the build canonicalizes them. |
+| `source/tests.json` | **The test catalog** — `{ "Test Name": { "unit", "group", "featured", "range": [low, high], "aliases": [ … ] } }`. Controls unit, grouping, the featured flag, the reference range, and the synonyms/acronyms that resolve to this test. `null` in `range` = unbounded on that side. |
+| `source/panels.json` | **Preset buttons** — `{ "Panel name": ["Test", …] }`. A panel appears if ≥2 of its tests have data; catalog `group` values are appended as panels automatically. Panel names are searchable. |
 | `source/genetics.json` | `{ "findings": […gene result cards], "panels": [{ "panel", "genes": […], "positive": […] }] }` — genes in `positive` render highlighted/flashing. |
 | `source/profile.json` | `{ "name": … }` — drives the hero title and topbar. |
 | `source/evaluations.json` | Procedure/evaluation history (not currently rendered). |
@@ -59,6 +60,44 @@ redeploys.
 New test entirely? Add its entry to `tests.json` (unit, group, range), then
 start logging it in `results.json`. The build warns about any result whose test
 is missing from the catalog.
+
+## Aliases
+
+Every test carries an `aliases` list, used in two places:
+
+- **On import** — a result logged as `A1c`, `HbA1c`, or `hemoglobin a1c` all land
+  on the canonical `Hemoglobin A1c` instead of creating duplicate series.
+  Matching ignores case, spacing, and punctuation. The build prints any name it
+  resolved, and any alias that collides between two tests.
+- **In the filter box** — searching matches the test name, its aliases, its
+  group, and any panel it belongs to. So `tsat` finds Iron Saturation, `PFOA`
+  finds L-Perfluorooctanoic acid, `ANC` finds Neutrophils (Absolute), and
+  `lipids` or `kidney` surface whole panels. Multi-word queries match all words.
+
+Adding an alias is one array entry — no code change.
+
+## Results table & trend — and which one shows
+
+The **Results** table comes first: rows are tests, columns are visit dates (plus
+unit and reference range), with the most recent visit outlined and labelled
+"latest". Values outside the reference range are highlighted — amber ▲ above,
+blue ▼ below — and hovering a flagged value names the range it broke. The
+subtitle counts tests, visits, and out-of-range values.
+
+The **Trend** chart appears below it, but only when plotting makes sense. What
+shows is driven by the selection:
+
+| Selection | Shows |
+|---|---|
+| A panel or hand-picked tests | table **and** chart |
+| A panel marked `"view": "table"` in `panels.json` (e.g. CBC Differential) | table only |
+| **All tests** | table only — 78 series is unreadable as a chart |
+
+To make a panel table-only, give it the object form in `panels.json`:
+
+```json
+"CBC Differential": { "view": "table", "tests": ["Neutrophils", …] }
+```
 
 ## The chart
 
