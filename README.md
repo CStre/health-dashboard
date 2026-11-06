@@ -3,7 +3,7 @@
 Personal health dashboard: blood test trends, genetic testing, and reference
 ranges — published to GitHub Pages with the underlying data **encrypted**. The
 public site holds only ciphertext; a passphrase entered in the browser decrypts
-it locally (Web Crypto, AES-256-GCM, PBKDF2-SHA256 at 600k iterations). Nothing
+it locally (AES-256-GCM, key derived with Argon2id: 18 chained passes of 128 MB × 3). Nothing
 leaves the browser, and nothing rendered on the page is hardcoded — it is all
 built from the source files below.
 
@@ -22,6 +22,22 @@ Browser: enter passphrase → decrypt in-memory → render dashboard
 On `localhost` the page instead loads `data/health.local.enc.json` (gitignored,
 fixed passphrase `password`) and **auto-unlocks**. The deployed site never has
 that file, so the real passphrase is always required in production.
+
+## Local-only mode
+
+```bash
+npm run build:local     # no passphrase prompt
+open local.html
+```
+
+`local.html` is a single self-contained file: the encrypted bundle is inlined
+into the page, so it opens straight from disk (`file://`) with **no server and
+no separate data file**. Unlock it by typing **`test`** — there is no
+auto-unlock here, and nothing about the unlock is stubbed: the page runs the
+same Argon2id → AES-256-GCM path as production, just under a known phrase. Wrong
+phrases still fail at the *Decrypt* step.
+
+`local.html` holds the real data and is gitignored; it must stay that way.
 
 ## Adding new results — the normal workflow
 
@@ -126,11 +142,12 @@ used here as a per-analyte visual guide only.
 - Losing the passphrase loses nothing — the plaintext sources stay on your
   machine; rebuild with a new passphrase.
 - A wrong passphrase fails AES-GCM authentication — nothing partial renders.
-  The unlock runs as visible steps (fetch → 20 key-derivation rounds → import →
-  authenticate → decrypt → parse → render, ~4.5s). Percentages track real
-  completed work; each step is held ~400ms so the sequence is readable. A wrong
-  phrase stops at **Authenticating phrase** and the bar freezes red there —
-  that is genuinely where AES-GCM detects the bad key.
+  The unlock runs as visible steps (fetch → 18 Argon2id key passes → decrypt →
+  parse → render, ~6.7s on an M-series Mac). Key derivation is all real work;
+  decrypt, parse and render each run first and then hold a fixed window (0.5 s,
+  0.25 s, 1 s) so the sequence is readable. A wrong phrase stops at **Decrypt**
+  and the ring turns red there — that is genuinely where AES-GCM detects the
+  bad key.
 - The **Unlocked** pill (top right) doubles as a lock button: clicking it
   discards the decrypted data (it only ever lives in page memory) and returns
   to the phrase prompt. On localhost, locking also suppresses the auto-unlock

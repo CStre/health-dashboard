@@ -4,7 +4,7 @@
  *
  * Everything is sourced from the JSON files in source/ (all gitignored),
  * assembled into one payload object, encrypted with AES-256-GCM under a key
- * derived from a passphrase (PBKDF2-SHA256, 600k iterations), and written to
+ * derived from a passphrase with Argon2id (memory-hard), and written to
  * data/health.enc.json — the only data file that gets committed/published.
  * Nothing rendered on the page is hardcoded there; it all comes from these
  * sources through this build.
@@ -12,6 +12,8 @@
  * Usage:
  *   npm run build                              # prompts for the passphrase
  *   HEALTH_PASSPHRASE=... npm run build
+ *   npm run build:local                        # self-contained local.html, phrase "test"
+ *   npm run build:localcopy                    # data/health.local.enc.json only, phrase "password"
  *
  * Sources:
  *   source/results.json     # THE data, keyed by visit date:
@@ -20,7 +22,11 @@
  *                           #   { "Hemoglobin": { unit, group, featured, range: [lo, hi] }, ... }
  *   source/genetics.json    # { findings: [...gene result cards], panels: [{panel, genes, positive}] }
  *   source/profile.json     # { name }
- *   source/evaluations.json # evaluation history (not currently rendered)
+ *   source/evaluations.json # evaluation history (rendered on the History page)
+ *   source/recommendations.json # only `conditions` + `treatment` are used (Overview clinical picture)
+ *   source/family-history.json # relatives relevant to the hereditary conditions
+ *   source/providers.json   # care team, current and prior
+ *   source/draws.json       # optional: which lab ran each draw ({ "YYYY-MM-DD": { lab, note } })
  */
 "use strict";
 
@@ -30,13 +36,23 @@ const path = require("node:path");
 const readline = require("node:readline");
 
 const ROOT = path.join(__dirname, "..");
-/* Key derivation: 20 chained PBKDF2-SHA256 rounds × 30k iterations = 600k
-   total. Chunked so the browser can report real progress per round. */
-const KDF_ROUNDS = 20;
-const KDF_ITER_PER_ROUND = 30000;
+/* Key derivation: Argon2id (RFC 9106), memory-hard, so every passphrase guess
+   costs real memory as well as time, which is what defeats GPU/ASIC cracking.
+   Run as a short chain (each round's 32-byte output is the next round's input,
+   salted with salt‖round) so the browser can report real progress per round.
+   Bundles record their own parameters, so older (PBKDF2) files still open. */
+const { argon2id } = require("hash-wasm");
+const KDF = {
+  rounds: 18,           // chained Argon2id calls (~5 s unlock on an M-series Mac)
+  memoryKiB: 131072,    // 128 MiB per call
+  passes: 3,            // Argon2 time cost (t) per call
+  parallelism: 1,
+};
 
 /** Fixed passphrase for the local-only copy served on localhost (gitignored). */
 const LOCAL_PASSPHRASE = "password";
+/** Fixed passphrase for the fully self-contained local.html preview build. */
+const PREVIEW_PASSPHRASE = "test";
 
 /* ---------- Sources ---------- */
 
@@ -83,6 +99,7 @@ function buildAliasIndex(catalog) {
 function buildBloodwork(visits, catalog, aliasIndex) {
   const rows = [];
   const skipped = [];
+  const qualitative = []; // non-numeric results ("ND", "Non Reactive", "NORMAL") kept as text
   const uncataloged = new Set();
   const resolved = [];
   for (const [rawDate, tests] of Object.entries(visits)) {
@@ -103,6 +120,7 @@ function buildBloodwork(visits, catalog, aliasIndex) {
           : Number(String(rawValue).replace(/[<>,]/g, "").trim());
       if (!Number.isFinite(value) || String(rawValue).trim() === "") {
         skipped.push(`${test} @ ${date}: ${JSON.stringify(rawValue)}`);
+        if (String(rawValue).trim()) qualitative.push({ date, test, unit: catalog[test]?.unit || "", text: String(rawValue).trim() });
         continue;
       }
       const cat = catalog[test];
@@ -118,7 +136,8 @@ function buildBloodwork(visits, catalog, aliasIndex) {
     }
   }
   rows.sort((a, b) => a.date.localeCompare(b.date) || a.test.localeCompare(b.test));
-  return { rows, skipped, uncataloged: [...uncataloged], resolved };
+  qualitative.sort((a, b) => a.date.localeCompare(b.date) || a.test.localeCompare(b.test));
+  return { rows, skipped, qualitative, uncataloged: [...uncataloged], resolved };
 }
 
 /* ---------- Passphrase + encryption ---------- */
@@ -141,27 +160,36 @@ function promptPassphrase() {
   });
 }
 
-function deriveKey(passphrase, salt) {
-  let material = Buffer.from(passphrase, "utf8");
-  for (let r = 0; r < KDF_ROUNDS; r++) {
-    const roundSalt = Buffer.concat([salt, Buffer.from([r])]);
-    material = crypto.pbkdf2Sync(material, roundSalt, KDF_ITER_PER_ROUND, 32, "sha256");
+async function deriveKey(passphrase, salt) {
+  let material = new Uint8Array(Buffer.from(passphrase, "utf8"));
+  for (let r = 0; r < KDF.rounds; r++) {
+    material = await argon2id({
+      password: material,
+      salt: new Uint8Array(Buffer.concat([salt, Buffer.from([r])])),
+      parallelism: KDF.parallelism,
+      iterations: KDF.passes,
+      memorySize: KDF.memoryKiB,
+      hashLength: 32,
+      outputType: "binary",
+    });
   }
-  return material;
+  return Buffer.from(material);
 }
 
-function encrypt(payloadObj, passphrase) {
+async function encrypt(payloadObj, passphrase) {
   const salt = crypto.randomBytes(16);
   const iv = crypto.randomBytes(12);
-  const key = deriveKey(passphrase, salt);
+  const key = await deriveKey(passphrase, salt);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
   const plaintext = Buffer.from(JSON.stringify(payloadObj), "utf8");
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final(), cipher.getAuthTag()]);
   return {
-    v: 2,
-    kdf: "PBKDF2-SHA256-chained",
-    rounds: KDF_ROUNDS,
-    iterations: KDF_ITER_PER_ROUND,
+    v: 3,
+    kdf: "argon2id-chained",
+    rounds: KDF.rounds,
+    memoryKiB: KDF.memoryKiB,
+    passes: KDF.passes,
+    parallelism: KDF.parallelism,
     cipher: "AES-256-GCM",
     salt: salt.toString("base64"),
     iv: iv.toString("base64"),
@@ -171,15 +199,22 @@ function encrypt(payloadObj, passphrase) {
 
 /* ---------- Main ---------- */
 
-async function main() {
+/** Assemble the full payload from source/, plus the build diagnostics. */
+function buildPayload() {
   const catalog = readJson("tests.json", {});
   const visits = readJson("results.json", {});
   const genetics = readJson("genetics.json", { findings: [], panels: [] });
   const panelCfg = readJson("panels.json", {});
   delete panelCfg._comment;
+  // Only the clinical picture is published; the suggestion items are not.
+  const recs = readJson("recommendations.json", { conditions: [] });
+  const familyHistory = readJson("family-history.json", { relatives: [] });
+  delete familyHistory._comment;
+  const providers = readJson("providers.json", { current: [], prior: [] });
+  delete providers._comment;
 
   const { index: aliasIndex, collisions } = buildAliasIndex(catalog);
-  const { rows: bloodwork, skipped, uncataloged, resolved } = buildBloodwork(visits, catalog, aliasIndex);
+  const { rows: bloodwork, skipped, qualitative, uncataloged, resolved } = buildBloodwork(visits, catalog, aliasIndex);
   if (!bloodwork.length) {
     console.error("No results found in source/results.json — nothing to build.");
     process.exit(1);
@@ -187,9 +222,17 @@ async function main() {
 
   const ranges = {};
   const aliases = {};
+  /* Ranges were seeded from typical adult ranges rather than copied off the
+     lab reports. Any test may be confirmed individually by adding
+     "rangeVerified": true in tests.json; the page marks the rest as
+     provisional so nothing is over-claimed to a clinician. */
+  const rangesVerified = {};
+  const rangeInfo = {}; // { source, note } per test, shown beside the normal window
   for (const [name, c] of Object.entries(catalog)) {
+    if (c.rangeSource || c.rangeNote) rangeInfo[name] = { source: c.rangeSource || "", note: c.rangeNote || "" };
     const [lo, hi] = Array.isArray(c.range) ? c.range : [null, null];
     if (lo != null || hi != null) ranges[name] = [lo, hi];
+    if (c.rangeVerified) rangesVerified[name] = true;
     if (c.aliases && c.aliases.length) aliases[name] = c.aliases;
   }
 
@@ -217,35 +260,35 @@ async function main() {
     generatedAt: new Date().toISOString(),
     profile: readJson("profile.json", {}),
     bloodwork,
+    qualitative,
+    // Per-draw provenance ({ "YYYY-MM-DD": { lab, note } }) for the printable lab report.
+    drawInfo: readJson("draws.json", {}),
     ranges,
+    rangesVerified,
+    rangeInfo,
     aliases,
     panels,
     geneticsPanels: genetics.panels || [],
     geneticsResults: genetics.findings || [],
     evaluations: readJson("evaluations.json", []),
+    conditions: recs.conditions || [],
+    treatment: recs.treatment || null,
+    familyHistory,
+    providers,
   };
 
-  const passphrase = process.env.HEALTH_PASSPHRASE || (await promptPassphrase());
-  if (passphrase.length < 12) {
-    console.error(
-      "Refusing: passphrase under 12 characters. The encrypted file is public —\n" +
-        "use a long passphrase (e.g. 5+ random words)."
-    );
-    process.exit(1);
-  }
+  return { payload, skipped, uncataloged, resolved, collisions, genetics, bloodwork };
+}
 
-  const outPath = path.join(ROOT, "data", "health.enc.json");
-  fs.mkdirSync(path.dirname(outPath), { recursive: true });
-  fs.writeFileSync(outPath, JSON.stringify(encrypt(payload, passphrase)));
-
-  const localPath = path.join(ROOT, "data", "health.local.enc.json");
-  fs.writeFileSync(localPath, JSON.stringify(encrypt(payload, LOCAL_PASSPHRASE)));
-
+/** Console summary shared by both build modes. */
+function reportBuild({ bloodwork, payload, skipped, uncataloged, resolved, collisions, genetics }) {
   const tests = new Set(bloodwork.map((r) => r.test)).size;
   const dates = new Set(bloodwork.map((r) => r.date)).size;
-  console.log(`Encrypted ${bloodwork.length} results · ${tests} tests · ${dates} visits → ${path.relative(ROOT, outPath)}`);
-  console.log(`Local copy (passphrase "${LOCAL_PASSPHRASE}", gitignored) → ${path.relative(ROOT, localPath)}`);
+  console.log(`${bloodwork.length} results · ${tests} tests · ${dates} visits`);
   console.log(`Panels: ${Object.keys(payload.panels).join(", ")}`);
+  const nVerified = Object.keys(payload.rangesVerified || {}).length;
+  console.log(`Reference ranges: ${nVerified} of ${Object.keys(payload.ranges || {}).length} verified against a lab report`);
+  console.log(`Conditions: ${payload.conditions.length} active`);
   if (resolved.length) {
     const uniq = [...new Set(resolved)];
     console.log(`Alias-resolved names: ${uniq.join(", ")}`);
@@ -262,6 +305,88 @@ async function main() {
     console.log(`Skipped ${skipped.length} non-numeric/bad entr(ies):`);
     for (const s of skipped) console.log("  -", s);
   }
+}
+
+/**
+ * Local-only build: inline the encrypted bundle into a copy of index.html so
+ * the result opens straight from disk (file://) with no server and no
+ * separate data file. Encrypted for real under the fixed phrase "test" — the
+ * page runs the same KDF/decrypt path the published site does.
+ */
+async function buildLocal(built) {
+  const bundle = await encrypt(built.payload, PREVIEW_PASSPHRASE);
+  const template = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
+  if (!template.includes("<!-- EMBEDDED_DATA -->")) {
+    console.error("index.html is missing the <!-- EMBEDDED_DATA --> marker.");
+    process.exit(1);
+  }
+  // "<" is escaped so no substring of the JSON can close the script element.
+  const json = JSON.stringify(bundle).replace(/</g, "\\u003c");
+  const html = template
+    .replace(
+      "<!-- EMBEDDED_DATA -->",
+      `<script type="application/json" id="embedded-data">${json}</script>`
+    )
+    .replace(
+      "An incorrect phrase fails authentication and reveals nothing.",
+      `Local preview build: the access phrase is <strong>${PREVIEW_PASSPHRASE}</strong>.`
+    );
+  const outPath = path.join(ROOT, "local.html");
+  fs.writeFileSync(outPath, html);
+  reportBuild(built);
+  console.log(
+    `Self-contained preview (phrase "${PREVIEW_PASSPHRASE}", gitignored) → ${path.relative(ROOT, outPath)}`
+  );
+  console.log(`Open it directly: open ${path.relative(ROOT, outPath)}`);
+}
+
+/**
+ * Design-iteration build: the payload as plaintext JSON (gitignored). Served
+ * on localhost, index.html loads it and renders with no unlock, so design
+ * edits to index.html need only a refresh.
+ */
+function buildDev(built) {
+  const outPath = path.join(ROOT, "data", "health.dev.json");
+  fs.writeFileSync(outPath, JSON.stringify(built.payload));
+  reportBuild(built);
+  console.log(`Plaintext dev payload (gitignored) → ${path.relative(ROOT, outPath)}`);
+  console.log("Serve it: npm run dev → http://localhost:8000");
+}
+
+/** Refresh only the localhost test copy (phrase "password") — no real passphrase needed. */
+async function buildLocalCopy(built) {
+  const localPath = path.join(ROOT, "data", "health.local.enc.json");
+  fs.writeFileSync(localPath, JSON.stringify(await encrypt(built.payload, LOCAL_PASSPHRASE)));
+  reportBuild(built);
+  console.log(`Local copy (passphrase "${LOCAL_PASSPHRASE}", gitignored) → ${path.relative(ROOT, localPath)}`);
+}
+
+async function main() {
+  const built = buildPayload();
+  if (process.argv.includes("--local")) return buildLocal(built);
+  if (process.argv.includes("--dev")) return buildDev(built);
+  if (process.argv.includes("--local-copy")) return buildLocalCopy(built);
+  const { payload } = built;
+
+  const passphrase = process.env.HEALTH_PASSPHRASE || (await promptPassphrase());
+  if (passphrase.length < 12) {
+    console.error(
+      "Refusing: passphrase under 12 characters. The encrypted file is public —\n" +
+        "use a long passphrase (e.g. 5+ random words)."
+    );
+    process.exit(1);
+  }
+
+  const outPath = path.join(ROOT, "data", "health.enc.json");
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, JSON.stringify(await encrypt(payload, passphrase)));
+
+  const localPath = path.join(ROOT, "data", "health.local.enc.json");
+  fs.writeFileSync(localPath, JSON.stringify(await encrypt(payload, LOCAL_PASSPHRASE)));
+
+  reportBuild(built);
+  console.log(`Encrypted → ${path.relative(ROOT, outPath)}`);
+  console.log(`Local copy (passphrase "${LOCAL_PASSPHRASE}", gitignored) → ${path.relative(ROOT, localPath)}`);
 }
 
 main().catch((e) => {

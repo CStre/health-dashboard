@@ -17,3 +17,8 @@ raw/
 # Local plaintext sources — never committed; encrypted into data/health.enc.json by scripts/build.js
 source/
 data/health.local.enc.json
+# Plaintext payload for design iteration (npm run build:dev) — real data, unencrypted
+data/health.dev.json
+
+# Self-contained local preview build (npm run build:local) — contains real data
+local.html

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * @fileoverview Verify data/health.enc.json opens with a given phrase.
+ * @fileoverview Verify data/health.enc.json opens with a given phrase
+ * (Argon2id bundles, and older PBKDF2 ones).
  *
  * Run this before committing: the local dashboard always reads the
  * `password`-encrypted local copy, so it never exercises the real phrase.
@@ -44,8 +45,21 @@ async function main() {
   const phrase = process.env.HEALTH_PASSPHRASE || (await promptPassphrase());
 
   let key = Buffer.from(phrase, "utf8");
-  for (let r = 0; r < (bundle.rounds || 1); r++) {
-    key = crypto.pbkdf2Sync(key, Buffer.concat([salt, Buffer.from([r])]), bundle.iterations, 32, "sha256");
+  if (String(bundle.kdf || "").startsWith("argon2id")) {
+    const { argon2id } = require("hash-wasm");
+    let m = new Uint8Array(key);
+    for (let r = 0; r < bundle.rounds; r++) {
+      m = await argon2id({
+        password: m, salt: new Uint8Array(Buffer.concat([salt, Buffer.from([r])])),
+        parallelism: bundle.parallelism, iterations: bundle.passes, memorySize: bundle.memoryKiB,
+        hashLength: 32, outputType: "binary",
+      });
+    }
+    key = Buffer.from(m);
+  } else {
+    for (let r = 0; r < (bundle.rounds || 1); r++) {
+      key = crypto.pbkdf2Sync(key, Buffer.concat([salt, Buffer.from([r])]), bundle.iterations, 32, "sha256");
+    }
   }
 
   try {
