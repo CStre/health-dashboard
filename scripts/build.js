@@ -27,6 +27,7 @@
  *   source/family-history.json # relatives relevant to the hereditary conditions
  *   source/providers.json   # care team, current and prior
  *   source/draws.json       # optional: which lab ran each draw ({ "YYYY-MM-DD": { lab, note } })
+ *   source/genome.json      # optional: annotated 23andMe data from `npm run genome` (Genetics PDF)
  */
 "use strict";
 
@@ -275,6 +276,8 @@ function buildPayload() {
     treatment: recs.treatment || null,
     familyHistory,
     providers,
+    // Annotated 23andMe markers + ClinVar call-outs, for the Genetics PDF. Absent until `npm run genome` has run.
+    genome: readJson("genome.json", null),
   };
 
   return { payload, skipped, uncataloged, resolved, collisions, genetics, bloodwork };
@@ -301,6 +304,10 @@ function reportBuild({ bloodwork, payload, skipped, uncataloged, resolved, colli
   }
   const positives = (genetics.panels || []).flatMap((p) => (p.positive || []).map((g) => `${g} [${p.panel}]`));
   if (positives.length) console.log("Detected genes:", positives.join(", "));
+  if (payload.genome) {
+    const gm = payload.genome;
+    console.log(`Genome: ${gm.genes.length} genes of interest, ${gm.callouts.length} ClinVar call-outs (ClinVar ${gm.source.clinvarDate})`);
+  }
   if (skipped.length) {
     console.log(`Skipped ${skipped.length} non-numeric/bad entr(ies):`);
     for (const s of skipped) console.log("  -", s);
